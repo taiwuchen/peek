@@ -4,14 +4,17 @@ import Foundation
 public struct AppSettings: Sendable, Equatable, Codable {
     public var provider: ProviderID
     public var model: String
+    /// Question sent when the user triggers a capture without typing one.
+    public var defaultQuestion: String
     /// Path override for the `claude` binary; nil means search PATH and common install locations.
     public var claudePath: String?
     /// Path override for the `codex` binary; nil means search PATH and common install locations.
     public var codexPath: String?
 
-    public init(provider: ProviderID = .anthropicAPI, model: String = "claude-opus-5", claudePath: String? = nil, codexPath: String? = nil) {
+    public init(provider: ProviderID = .anthropicAPI, model: String = "claude-opus-5", defaultQuestion: String = "Explain this", claudePath: String? = nil, codexPath: String? = nil) {
         self.provider = provider
         self.model = model
+        self.defaultQuestion = defaultQuestion
         self.claudePath = claudePath
         self.codexPath = codexPath
     }
