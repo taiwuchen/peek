@@ -9,7 +9,7 @@ public struct AppSettings: Sendable, Equatable, Codable {
     /// Path override for the `codex` binary; nil means search PATH and common install locations.
     public var codexPath: String?
 
-    public init(provider: ProviderID = .anthropicAPI, model: String = "claude-sonnet-5", claudePath: String? = nil, codexPath: String? = nil) {
+    public init(provider: ProviderID = .anthropicAPI, model: String = "claude-opus-5", claudePath: String? = nil, codexPath: String? = nil) {
         self.provider = provider
         self.model = model
         self.claudePath = claudePath

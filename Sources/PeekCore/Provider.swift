@@ -60,3 +60,14 @@ public protocol AIProvider: Sendable {
     /// Streams answer text deltas. Finishes when the answer is complete; throws ProviderError on failure.
     func stream(_ request: AIRequest) -> AsyncThrowingStream<String, Error>
 }
+
+extension AIRequest {
+    /// System instruction shared by every provider.
+    public static let systemPrompt = "You are a concise assistant embedded in the user's macOS desktop. The user selected some text or captured part of their screen and is asking about it. Answer directly in plain Markdown. Do not restate the content."
+
+    /// The user turn text: the question plus any captured text, quoted. Image captures are attached separately by each provider.
+    public var userText: String {
+        guard case .text(let selected)? = capture?.content else { return question }
+        return "\(question)\n\n<selected_text>\n\(selected)\n</selected_text>"
+    }
+}
