@@ -1,5 +1,7 @@
 import AppKit
+import PeekCapture
 import PeekCore
+import PeekProviders
 import PeekUI
 import SwiftUI
 
@@ -15,9 +17,15 @@ final class PeekAppDelegate: NSObject, NSApplicationDelegate {
     private var controller: AppController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let controller = AppController(selectionReader: StubSelectionReader(), regionCapturer: StubRegionCapturer(),
-                                       providers: [EchoProvider()], settingsStore: UserDefaultsSettingsStore(),
-                                       credentials: KeychainCredentialStore())
+        let settings = UserDefaultsSettingsStore()
+        let credentials = KeychainCredentialStore()
+        let controller = AppController(
+            selectionReader: AccessibilitySelectionReader(),
+            regionCapturer: RegionCapturer(),
+            providers: apiProviders(credentials: credentials) + cliProviders(settings: settings),
+            settingsStore: settings,
+            credentials: credentials
+        )
         self.controller = controller
         controller.start()
     }
