@@ -1,0 +1,54 @@
+name: Peek
+options:
+  bundleIdPrefix: com.taiwu
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+packages:
+  PeekKit:
+    path: .
+targets:
+  Peek:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+        type: syncedFolder
+    dependencies:
+      - package: PeekKit
+        product: PeekCore
+      - package: PeekKit
+        product: PeekCapture
+      - package: PeekKit
+        product: PeekProviders
+      - package: PeekKit
+        product: PeekUI
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleName: Peek
+        CFBundleDisplayName: Peek
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "15.0"
+        LSUIElement: true
+        NSPrincipalClass: NSApplication
+        NSHumanReadableCopyright: ""
+    entitlements:
+      path: App/Peek.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+        com.apple.security.cs.allow-jit: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.taiwu.peek
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        ENABLE_HARDENED_RUNTIME: true
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        GENERATE_INFOPLIST_FILE: false
