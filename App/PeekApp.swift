@@ -21,7 +21,7 @@ final class PeekAppDelegate: NSObject, NSApplicationDelegate {
         let credentials = KeychainCredentialStore()
         let controller = AppController(
             regionCapturer: RegionCapturer(),
-            providers: apiProviders(credentials: credentials) + cliProviders(settings: settings),
+            providers: cliProviders(settings: settings) + apiProviders(credentials: credentials),
             settingsStore: settings,
             credentials: credentials
         )
