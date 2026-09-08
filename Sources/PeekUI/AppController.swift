@@ -5,18 +5,22 @@ import SwiftUI
 
 @MainActor
 public final class AppController: NSObject, NSMenuDelegate {
-    private let session: AskSession
+    private let regionCapturer: any ScreenRegionCapturer
+    private let providers: [any AIProvider]
+    private let settingsStore: any SettingsStore
     private let settingsModel: SettingsModel
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
-    private lazy var panel = AnswerPanel(session: session, openSettings: { [weak self] in self?.showSettings() })
+    /// Open conversation windows, one per capture, oldest first.
+    private(set) var conversations: [AnswerPanel] = []
 
     public init(regionCapturer: any ScreenRegionCapturer,
                 providers: [any AIProvider], settingsStore: any SettingsStore, credentials: any CredentialStore) {
-        session = AskSession(regionCapturer: regionCapturer, providers: providers, settingsStore: settingsStore)
+        self.regionCapturer = regionCapturer
+        self.providers = providers
+        self.settingsStore = settingsStore
         settingsModel = SettingsModel(providers: providers, store: settingsStore, credentials: credentials)
         super.init()
-        session.onSettingsChange = { [weak self] in self?.settingsModel.settings = settingsStore.load() }
     }
 
     public func start() {
@@ -36,16 +40,29 @@ public final class AppController: NSObject, NSMenuDelegate {
         item.menu = menu
         statusItem = item
         KeyboardShortcuts.onKeyUp(for: .askRegion) { [weak self] in self?.askRegion() }
-        session.onPresent = { [weak self] in
-            guard let self else { return }
-            panel.present(anchor: session.latestCapture?.anchor)
-        }
     }
 
     public func menuWillOpen(_ menu: NSMenu) { KeyboardShortcuts.disable(.askRegion) }
     public func menuDidClose(_ menu: NSMenu) { KeyboardShortcuts.enable(.askRegion) }
 
-    @objc private func askRegion() { session.beginCapture() }
+    /// Starts a new conversation in its own window. Ignored while a region selection is already open.
+    @objc func askRegion() {
+        guard !conversations.contains(where: { $0.session.isCapturing }) else { return }
+        let session = AskSession(regionCapturer: regionCapturer, providers: providers, settingsStore: settingsStore)
+        let panel = AnswerPanel(session: session, openSettings: { [weak self] in self?.showSettings() })
+        session.onSettingsChange = { [weak self] in
+            guard let self else { return }
+            settingsModel.settings = settingsStore.load()
+        }
+        session.onPresent = { [weak panel] in
+            guard let panel else { return }
+            panel.present(anchor: panel.session.latestCapture?.anchor)
+        }
+        session.onCaptureCancelled = { [weak panel] in panel?.close() }
+        panel.onClose = { [weak self, weak panel] in self?.conversations.removeAll { $0 === panel } }
+        conversations.append(panel)
+        session.beginCapture()
+    }
 
     @objc private func showSettings() {
         if settingsWindow == nil {

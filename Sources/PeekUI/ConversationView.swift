@@ -37,14 +37,12 @@ struct ConversationView: View {
             Divider()
             ScrollViewReader { scroll in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 20) {
                         ForEach(session.messages) { message in
                             ConversationTurn(message: message, note: session.responseNotes[message.id])
                         }
                         if session.isStreaming {
                             ProgressView("Responding…").controlSize(.small)
-                        } else if session.isCapturing {
-                            Text("Select a screen region…").foregroundStyle(.secondary)
                         }
                         Color.clear.frame(height: 1).id("bottom")
                     }

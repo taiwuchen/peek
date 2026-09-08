@@ -194,41 +194,34 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     #expect(session.message == nil)
 }
 
-@Test @MainActor func closeCancelsStreamAndFreshConversationIgnoresOldDeltas() async throws {
-    let (oldStream, oldContinuation) = AsyncThrowingStream<String, Error>.makeStream()
-    let count = Mutex(0)
+@Test @MainActor func cancelStopsStreamKeepsPartialAnswerAndIgnoresLateDeltas() async throws {
+    let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
     let cancelled = Mutex(false)
-    oldContinuation.onTermination = { reason in
+    continuation.onTermination = { reason in
         if case .cancelled = reason { cancelled.withLock { $0 = true } }
     }
-    let session = makeSession(provider: TestProvider(respond: { _ in
-        let attempt = count.withLock { $0 += 1; return $0 }
-        return attempt == 1 ? oldStream : AsyncThrowingStream { $0.yield("Fresh answer"); $0.finish() }
-    }))
+    let session = makeSession(provider: TestProvider(respond: { _ in stream }))
     session.beginCapture()
     try await waitUntil { session.isStreaming }
-    oldContinuation.yield("Old answer")
+    continuation.yield("Old answer")
     try await waitUntil { session.messages.count == 2 }
-    session.close()
-    #expect(session.messages.isEmpty)
-    #expect(session.question.isEmpty)
-    #expect(!session.canRetry)
-    session.beginCapture()
-    oldContinuation.yield(" stale")
-    try await waitUntil { !session.isBusy && cancelled.withLock { $0 } }
-    #expect(session.messages.count == 2)
-    #expect(session.messages.last?.text == "Fresh answer")
+    session.cancel()
+    #expect(!session.isBusy)
+    continuation.yield(" stale")
+    try await waitUntil { cancelled.withLock { $0 } }
+    try await Task.sleep(for: .milliseconds(10))
+    #expect(session.messages.last?.text == "Old answer")
 }
 
-@Test @MainActor func closeAndStopIgnoreCaptureThatCompletesAfterCancellation() async throws {
-    for close in [false, true] {
+@Test @MainActor func cancelAndStopIgnoreCaptureThatCompletesAfterCancellation() async throws {
+    for cancel in [false, true] {
         let region = ControlledRegion()
         let session = makeSession(region: region)
         var presented = false
         session.onPresent = { presented = true }
         session.beginCapture()
         try await waitUntil { await region.isWaiting }
-        if close { session.close() } else { session.stop() }
+        if cancel { session.cancel() } else { session.stop() }
         await region.finish(.success(Region().capture))
         try await Task.sleep(for: .milliseconds(10))
         #expect(session.messages.isEmpty)
@@ -269,6 +262,8 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     try await waitUntil { !session.isBusy }
     let history = session.messages
     let panel = AnswerPanel(session: session, openSettings: {})
+    var closed = 0
+    panel.onClose = { closed += 1 }
     defer { panel.close() }
     #expect(!panel.styleMask.contains(.titled))
     #expect(panel.standardWindowButton(.closeButton) == nil)
@@ -285,7 +280,46 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     #expect(panel.frame == movedFrame)
     panel.close()
     #expect(!panel.isVisible)
-    #expect(session.messages.isEmpty)
+    #expect(closed == 1)
+    #expect(session.messages == history)
+}
+
+@Test @MainActor func eachCaptureOpensItsOwnWindowAndCancelledCapturesLeaveNone() async throws {
+    let region = ControlledRegion()
+    let defaults = UserDefaults(suiteName: "PeekUIController.\(UUID())")!
+    let store = UserDefaultsSettingsStore(defaults: defaults)
+    store.save(AppSettings())
+    let continuations = Mutex<[AsyncThrowingStream<String, Error>.Continuation]>([])
+    let controller = AppController(regionCapturer: region, providers: [TestProvider(respond: { _ in
+        AsyncThrowingStream { continuation in continuations.withLock { $0.append(continuation) } }
+    })], settingsStore: store, credentials: InMemoryCredentialStore())
+    defer { controller.conversations.forEach { $0.close() } }
+    controller.askRegion()
+    controller.askRegion()
+    #expect(controller.conversations.count == 1)
+    try await waitUntil { await region.isWaiting }
+    await region.finish(.failure(CaptureError.cancelled))
+    try await waitUntil { controller.conversations.isEmpty }
+
+    controller.askRegion()
+    try await waitUntil { await region.isWaiting }
+    await region.finish(.success(Region().capture))
+    let first = try #require(controller.conversations.first)
+    try await waitUntil { first.isVisible && first.session.isStreaming }
+
+    controller.askRegion()
+    #expect(controller.conversations.count == 2)
+    try await waitUntil { await region.isWaiting }
+    await region.finish(.success(Region().capture))
+    let second = try #require(controller.conversations.last)
+    try await waitUntil { second.isVisible }
+    #expect(second !== first)
+    #expect(second.session !== first.session)
+    #expect(first.session.isStreaming)
+
+    first.close()
+    #expect(controller.conversations == [second])
+    continuations.withLock { $0.forEach { $0.finish() } }
 }
 
 @Test @MainActor func importedScreenshotsAutomaticallyUseModeAndPreserveHistoryAndDraft() async throws {

@@ -17,6 +17,7 @@ final class AskSession {
     private(set) var modes: [PromptMode]
     private(set) var selectedModeID: UUID?
     var onPresent: (() -> Void)?
+    var onCaptureCancelled: (() -> Void)?
     var onSettingsChange: (() -> Void)?
     @ObservationIgnored private let regionCapturer: any ScreenRegionCapturer
     @ObservationIgnored private let settingsStore: any SettingsStore
@@ -80,7 +81,9 @@ final class AskSession {
                 isCapturing = false
                 task = nil
                 switch error {
-                case CaptureError.cancelled, is CancellationError: return
+                case CaptureError.cancelled, is CancellationError:
+                    onCaptureCancelled?()
+                    return
                 case CaptureError.screenRecordingPermissionDenied:
                     needsScreenRecordingPermission = true
                     message = "Allow Screen Recording access so Peek can capture a screen region."
@@ -160,15 +163,9 @@ final class AskSession {
         }
     }
 
-    func close() {
+    /// Abandons in-flight work when the conversation window closes.
+    func cancel() {
         invalidateOperation()
-        messages = []
-        responseNotes = [:]
-        question = ""
-        message = nil
-        needsScreenRecordingPermission = false
-        retryUserID = nil
-        responseID = nil
     }
 
     private func invalidateOperation() {

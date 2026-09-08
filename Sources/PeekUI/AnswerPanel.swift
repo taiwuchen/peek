@@ -4,7 +4,8 @@ import SwiftUI
 
 @MainActor
 final class AnswerPanel: NSPanel, NSWindowDelegate {
-    private let session: AskSession
+    let session: AskSession
+    var onClose: (() -> Void)?
     private var hasPosition = false
 
     init(session: AskSession, openSettings: @escaping () -> Void) {
@@ -61,9 +62,9 @@ final class AnswerPanel: NSPanel, NSWindowDelegate {
     }
 
     override func close() {
-        session.close()
-        hasPosition = false
+        session.cancel()
         super.close()
+        onClose?()
     }
 
     override func cancelOperation(_ sender: Any?) {}

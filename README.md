@@ -20,7 +20,7 @@ Peek is a macOS menu bar app with no Dock icon. It stays out of the way until yo
 2. The screenshot goes straight to your provider with the active prompt mode — no typing needed for the common case.
 3. The answer streams into a floating panel. Ask follow-ups, or add more screenshots by pasting or dragging them anywhere onto the panel.
 
-Screenshots and answers stay in the panel until you close it. Closing it ends the conversation.
+Each capture opens a new panel, so you can keep several conversations side by side. Screenshots and answers stay in a panel until you close it. Closing it ends that conversation.
 
 ## Prompt modes
 
