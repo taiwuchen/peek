@@ -34,7 +34,7 @@ targets:
         LSMinimumSystemVersion: "15.0"
         LSUIElement: true
         NSPrincipalClass: NSApplication
-        NSHumanReadableCopyright: ""
+        NSHumanReadableCopyright: "Copyright (c) 2026 Taiwu Chen. MIT licensed."
     entitlements:
       path: App/Peek.entitlements
       properties:
