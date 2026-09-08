@@ -27,13 +27,15 @@ struct ConversationView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 180, alignment: .leading)
                 .accessibilityLabel("Mode")
-                PanelDragHandle().frame(maxWidth: .infinity).frame(height: 24).help("Drag to move")
+                Spacer()
                 Button(action: close) { Image(systemName: "xmark").frame(width: 24, height: 24) }
                     .buttonStyle(.plain)
                     .help("Close conversation")
                     .accessibilityLabel("Close conversation")
             }
             .padding(12)
+            // The whole header drags the window; the menu and button sit on top and keep their clicks.
+            .background(PanelDragHandle())
             Divider()
             ScrollViewReader { scroll in
                 ScrollView {
@@ -112,36 +114,50 @@ private struct ConversationTurn: View {
     let message: AIMessage
     let note: String?
 
+    private var isUser: Bool { message.role == .user }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        if isUser {
+            turn.containerRelativeFrame(.horizontal, alignment: .trailing) { length, _ in length * 0.85 }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        } else {
+            turn.frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var turn: some View {
+        VStack(alignment: isUser ? .trailing : .leading, spacing: 8) {
             HStack {
-                Text(message.role == .user ? "You" : "Peek").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                Spacer()
-                if message.role == .assistant && !message.text.isEmpty {
-                    Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(message.text, forType: .string)
+                Text(isUser ? "You" : "Peek").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                if !isUser {
+                    Spacer()
+                    if !message.text.isEmpty {
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(message.text, forType: .string)
+                        }
+                        .font(.caption).buttonStyle(.borderless)
+                        .accessibilityLabel("Copy answer")
                     }
-                    .font(.caption).buttonStyle(.borderless)
-                    .accessibilityLabel("Copy answer")
                 }
             }
             ForEach(Array(message.captures.enumerated()), id: \.offset) { _, capture in
                 if case .image(let data) = capture.content, let image = NSImage(data: data) {
                     Image(nsImage: image).resizable().scaledToFit()
-                        .frame(maxWidth: 200, maxHeight: 120, alignment: .leading)
+                        .frame(maxWidth: 200, maxHeight: 120, alignment: isUser ? .trailing : .leading)
                         .accessibilityLabel("Captured screen region")
                 } else {
                     Label("Screen region", systemImage: "viewfinder")
                 }
             }
-            if message.role == .assistant {
+            if isUser {
+                if message.captures.isEmpty {
+                    Text(message.text).multilineTextAlignment(.trailing).textSelection(.enabled)
+                }
+            } else {
                 MarkdownAnswer(text: message.text)
                 if let note { Text(note).font(.caption).foregroundStyle(.secondary) }
-            } else if message.captures.isEmpty {
-                Text(message.text).textSelection(.enabled)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
