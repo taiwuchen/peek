@@ -19,7 +19,8 @@ let package = Package(
         .target(name: "PeekProviders", dependencies: ["PeekCore"]),
         .target(
             name: "PeekUI",
-            dependencies: ["PeekCore", "KeyboardShortcuts"]
+            dependencies: ["PeekCore", "KeyboardShortcuts"],
+            resources: [.process("Resources")]
         ),
         .testTarget(name: "PeekCoreTests", dependencies: ["PeekCore"]),
         .testTarget(name: "PeekCaptureTests", dependencies: ["PeekCapture"]),

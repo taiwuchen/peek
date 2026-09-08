@@ -189,7 +189,7 @@ private struct AnswerContent: View {
                 Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: 100, maxHeight: 54)
                     .accessibilityLabel("Captured screen region")
             } else { Label("Screen region", systemImage: "viewfinder") }
-        case nil: Label("Peek", systemImage: "sparkle")
+        case nil: Label { Text("Peek") } icon: { Image(nsImage: PeekGlyph.template) }
         }
     }
 
