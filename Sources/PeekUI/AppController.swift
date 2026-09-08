@@ -27,8 +27,7 @@ public final class AppController: NSObject, NSMenuDelegate {
     public func start() {
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "sparkle.viewfinder", accessibilityDescription: "Peek")
-        item.button?.image?.isTemplate = true
+        item.button?.image = PeekGlyph.template
         let menu = NSMenu()
         menu.delegate = self
         let selection = menu.addItem(withTitle: "Ask about selection", action: #selector(askSelection), keyEquivalent: "")

@@ -42,6 +42,7 @@ targets:
         com.apple.security.cs.allow-jit: false
     settings:
       base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_BUNDLE_IDENTIFIER: com.taiwu.peek
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: 1
