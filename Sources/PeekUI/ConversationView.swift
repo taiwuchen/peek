@@ -1,7 +1,6 @@
 import AppKit
 import PeekCore
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct ConversationView: View {
     @Bindable var session: AskSession
@@ -16,7 +15,10 @@ struct ConversationView: View {
                 Menu {
                     ForEach(session.modes) { mode in
                         Button(mode.name) { session.selectMode(mode.id) }
+                            .disabled(session.isBusy)
                     }
+                    Divider()
+                    Button("Settings…", systemImage: "gearshape", action: openSettings)
                 } label: {
                     Text(session.modes.first(where: { $0.id == session.selectedModeID })?.name ?? "Choose mode")
                         .lineLimit(1)
@@ -25,7 +27,6 @@ struct ConversationView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 180, alignment: .leading)
                 .accessibilityLabel("Mode")
-                .disabled(session.isBusy)
                 PanelDragHandle().frame(maxWidth: .infinity).frame(height: 24).help("Drag to move")
                 Button(action: close) { Image(systemName: "xmark").frame(width: 24, height: 24) }
                     .buttonStyle(.plain)
@@ -83,21 +84,6 @@ struct ConversationView: View {
                     }
                 }
                 HStack(alignment: .bottom) {
-                    Menu {
-                        Button("Capture screen region", systemImage: "viewfinder", action: session.beginCapture)
-                            .disabled(session.isBusy)
-                        Button("Choose images…", systemImage: "photo", action: chooseImages)
-                            .disabled(session.isBusy)
-                        Divider()
-                        Button("Settings…", systemImage: "gearshape", action: openSettings)
-                    } label: {
-                        Image(systemName: "paperclip")
-                            .frame(width: 24, height: 30)
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .help("Attach a screenshot")
-                    .accessibilityLabel("Attach a screenshot")
                     ChatComposer(text: $session.question, onSubmit: { session.send() },
                                  onImages: { session.addScreenshots($0) },
                                  onError: { session.reportInputError($0) })
@@ -120,19 +106,6 @@ struct ConversationView: View {
                 .buttonStyle(.plain)
             }
             .padding(12)
-        }
-    }
-
-    private func chooseImages() {
-        let picker = NSOpenPanel()
-        picker.allowedContentTypes = [.image]
-        picker.allowsMultipleSelection = true
-        picker.canChooseDirectories = false
-        picker.prompt = "Add"
-        picker.begin { result in
-            guard result == .OK else { return }
-            do { session.addScreenshots(try ScreenshotInput.pngImages(from: picker.urls)) }
-            catch { session.reportInputError(error.localizedDescription) }
         }
     }
 }

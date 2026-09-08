@@ -85,20 +85,41 @@ final class ComposerTextView: NSTextView {
     var onError: (String) -> Void = { _ in }
 
     override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
-        [.png, .tiff, .init("public.jpeg"), .fileURL] + super.readablePasteboardTypes
+        ScreenshotInput.dragTypes + super.readablePasteboardTypes
+    }
+
+    override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
+        ScreenshotInput.dragTypes + super.acceptableDragTypes
     }
 
     override func readSelection(from pasteboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        if attachImages(from: pasteboard) { return true }
+        return super.readSelection(from: pasteboard, type: type)
+    }
+
+    /// A plain text view refuses image drags outright, so claim them before it can.
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard ScreenshotInput.containsImages(sender.draggingPasteboard) else { return super.draggingEntered(sender) }
+        return .copy
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        guard ScreenshotInput.containsImages(sender.draggingPasteboard) else {
+            return super.performDragOperation(sender)
+        }
+        return attachImages(from: sender.draggingPasteboard)
+    }
+
+    /// Attaches any screenshots on `pasteboard`, leaving the draft text untouched.
+    /// Returns whether the pasteboard was handled as image input.
+    func attachImages(from pasteboard: NSPasteboard) -> Bool {
         do {
-            if let images = try ScreenshotInput.pngImages(from: pasteboard) {
-                onImages(images)
-                return true
-            }
+            guard let images = try ScreenshotInput.pngImages(from: pasteboard) else { return false }
+            onImages(images)
         } catch {
             onError(error.localizedDescription)
-            return true
         }
-        return super.readSelection(from: pasteboard, type: type)
+        return true
     }
 
     override func keyDown(with event: NSEvent) {

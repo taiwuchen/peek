@@ -4,6 +4,22 @@ import UniformTypeIdentifiers
 
 @MainActor
 enum ScreenshotInput {
+    /// Pasteboard types worth registering as drag destinations for screenshot input.
+    static let dragTypes: [NSPasteboard.PasteboardType] = [.png, .tiff, .init(UTType.jpeg.identifier), .fileURL]
+
+    /// Whether a drag or paste carries something `pngImages(from:)` can turn into a screenshot.
+    /// Used to decide whether to claim a drag before reading it.
+    static func containsImages(_ pasteboard: NSPasteboard) -> Bool {
+        for item in pasteboard.pasteboardItems ?? [] {
+            if item.types.contains(where: { UTType($0.rawValue)?.conforms(to: .image) == true }) { return true }
+            if let value = item.string(forType: .fileURL), let url = URL(string: value),
+               UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true {
+                return true
+            }
+        }
+        return false
+    }
+
     static func pngImages(from pasteboard: NSPasteboard) throws -> [Data]? {
         var images: [Data] = []
         for item in pasteboard.pasteboardItems ?? [] {
