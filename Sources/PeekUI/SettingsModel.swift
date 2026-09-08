@@ -5,7 +5,9 @@ import PeekCore
 @MainActor @Observable
 final class SettingsModel {
     let providers: [any AIProvider]
-    var settings: AppSettings { didSet { store.save(settings) } }
+    var settings: AppSettings { didSet { store.save(settings); onChange?() } }
+    /// Called after every settings change is saved.
+    @ObservationIgnored var onChange: (() -> Void)?
     private(set) var availability: [ProviderID: ProviderAvailability] = [:]
     private(set) var models: [AIModel] = []
     private(set) var isLoadingModels = false

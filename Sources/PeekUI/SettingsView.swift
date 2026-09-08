@@ -9,7 +9,7 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             Form {
-                KeyboardShortcuts.Recorder("Ask about screen region:", name: .askRegion)
+                KeyboardShortcuts.Recorder("Ask with active mode:", name: .askRegion)
                 ModesSettingsView(model: model)
             }
             .formStyle(.grouped)

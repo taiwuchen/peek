@@ -1,3 +1,4 @@
+import KeyboardShortcuts
 import PeekCore
 import SwiftUI
 
@@ -18,6 +19,7 @@ struct ModesSettingsView: View {
             }
             if let mode = model.settings.selectedMode {
                 Text(mode.prompt).lineLimit(4).foregroundStyle(.secondary)
+                KeyboardShortcuts.Recorder("Shortcut:", name: mode.shortcutName)
                 HStack {
                     Button("Edit mode") { editedMode = mode }
                     Button("Delete mode", role: .destructive) { model.deleteMode(id: mode.id) }
@@ -32,7 +34,7 @@ struct ModesSettingsView: View {
                     .foregroundStyle(.secondary)
             }
             Button("New mode") { isCreating = true }
-            Text("The active mode supplies the prompt for each new screen capture.")
+            Text("The active mode supplies the prompt for each new screen capture. A mode's shortcut selects it and starts a capture.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .sheet(item: $editedMode) { mode in
