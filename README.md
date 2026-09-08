@@ -24,7 +24,7 @@ Each capture opens a new panel, so you can keep several conversations side by si
 
 ## Prompt modes
 
-A mode is a name and a prompt — "Explain" / `Explain this` ships by default. Whatever mode is active is the prompt sent with each new screenshot, so the common question costs one hotkey and one drag. Switch modes from the panel's top-left menu; add, edit, and delete them in Settings.
+A mode is a name and a prompt — "Explain" / `Explain this` ships by default. Whatever mode is active is the prompt sent with each new screenshot, so the common question costs one hotkey and one drag. Switch modes from the panel's top-left menu; add, edit, and delete them in Settings. Each mode can have its own global shortcut, which selects it and starts a capture.
 
 ## Providers
 
@@ -66,6 +66,8 @@ xcodegen generate && xcodebuild -scheme Peek -configuration Debug build  # app
 ```
 
 Requires Xcode 26 (ScreenCaptureKit needs its concurrency annotations) and [xcodegen](https://github.com/yonaskolb/XcodeGen). `Peek.xcodeproj` is generated from `project.yml` and is not committed. `scripts/build-app.sh` does both steps and prints the built app path.
+
+`project.yml` signs with an Apple Development certificate so macOS keeps the Screen Recording grant across rebuilds. Set `DEVELOPMENT_TEAM` to your own team, or pass `CODE_SIGNING_ALLOWED=NO` to `xcodebuild` for an unsigned build as CI does.
 
 ### Layout
 
