@@ -118,12 +118,26 @@ import Testing
     #expect(!model.isLoadingModels)
 }
 
-@Test func markdownSeparatesParagraphsAndStreamingCodeBlocks() {
-    #expect(MarkdownBlock.parse("A **paragraph**.\n\n```swift\nlet x = 1\n\nprint(x)") == [
-        MarkdownBlock(text: "A **paragraph**.", isCode: false),
-        MarkdownBlock(text: "let x = 1\n\nprint(x)", isCode: true),
-    ])
-    #expect(MarkdownBlock.parse("~~~\ncode\n~~~\n\nAfter") == [
-        MarkdownBlock(text: "code", isCode: true), MarkdownBlock(text: "After", isCode: false),
-    ])
+@Test func modeShortcutNameFollowsModeID() {
+    let id = UUID(uuidString: "496B13F2-3390-4B08-93DC-24E47562845F")!
+    let mode = PromptMode(id: id, name: "Explain", prompt: "Explain this")
+    let renamed = PromptMode(id: id, name: "Summarize", prompt: "Summarize this")
+    #expect(mode.shortcutName == renamed.shortcutName)
+    #expect(mode.shortcutName.rawValue == "mode.496B13F2-3390-4B08-93DC-24E47562845F")
+    #expect(mode.shortcutName.defaultShortcut == nil)
+    #expect(mode.shortcutName != PromptMode(name: "Explain", prompt: "Explain this").shortcutName)
+}
+
+@Test @MainActor func settingsChangesNotifyObserver() throws {
+    let suite = "PeekUISettings.\(UUID())"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let store = UserDefaultsSettingsStore(defaults: defaults)
+    let model = SettingsModel(providers: [], store: store, credentials: InMemoryCredentialStore())
+    var seen: [[UUID]] = []
+    model.onChange = { seen.append(store.load().modes.map(\.id)) }
+    #expect(model.addMode(name: "Summarize", prompt: "Summarize this"))
+    let added = try #require(model.settings.selectedMode)
+    #expect(model.deleteMode(id: added.id))
+    #expect(seen == [model.settings.modes.map(\.id) + [added.id], model.settings.modes.map(\.id)])
 }
