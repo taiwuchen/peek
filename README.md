@@ -65,7 +65,7 @@ swift build && swift test                                                # packa
 xcodegen generate && xcodebuild -scheme Peek -configuration Debug build  # app
 ```
 
-Requires Xcode 16 and [xcodegen](https://github.com/yonaskolb/XcodeGen). `Peek.xcodeproj` is generated from `project.yml` and is not committed. `scripts/build-app.sh` does both steps and prints the built app path.
+Requires Xcode 26 (ScreenCaptureKit needs its concurrency annotations) and [xcodegen](https://github.com/yonaskolb/XcodeGen). `Peek.xcodeproj` is generated from `project.yml` and is not committed. `scripts/build-app.sh` does both steps and prints the built app path.
 
 ### Layout
 

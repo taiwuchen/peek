@@ -15,8 +15,9 @@ permissions:
 jobs:
   package:
     name: Package (build + test)
-    # macos-15 arm64 matches the app's minimum deployment target.
-    runs-on: macos-15
+    # macos-26 carries Xcode 26 / Swift 6.3, which ScreenCaptureKit's Sendable
+    # annotations require. Xcode 16 cannot build Sources/PeekCapture.
+    runs-on: macos-26
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -34,7 +35,7 @@ jobs:
 
   app:
     name: App target
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
