@@ -9,9 +9,8 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             Form {
-                KeyboardShortcuts.Recorder("Ask about selection:", name: .askSelection)
                 KeyboardShortcuts.Recorder("Ask about screen region:", name: .askRegion)
-                TextField("Default question", text: $model.settings.defaultQuestion)
+                ModesSettingsView(model: model)
             }
             .formStyle(.grouped)
             .tabItem { Label("General", systemImage: "gear") }
@@ -96,25 +95,16 @@ private struct APIKeyEditor: View {
 }
 
 struct PermissionsView: View {
-    @State private var accessibility = Permissions.accessibilityGranted
     @State private var screenRecording = Permissions.screenRecordingGranted
 
     var body: some View {
         Form {
-            Section("Accessibility") {
-                LabeledContent("Status", value: accessibility ? "Allowed" : "Not allowed")
-                Text("Read selected text from the app you are using.")
-                HStack {
-                    Button("Request access") { Permissions.requestAccessibility(); refresh() }
-                    Button("Open System Settings") { openPrivacySettings(.accessibility) }
-                }
-            }
             Section("Screen Recording") {
                 LabeledContent("Status", value: screenRecording ? "Allowed" : "Not allowed")
                 Text("Capture the screen region you select.")
                 HStack {
                     Button("Request access") { Permissions.requestScreenRecording(); refresh() }
-                    Button("Open System Settings") { openPrivacySettings(.screenRecording) }
+                    Button("Open System Settings") { openPrivacySettings() }
                 }
             }
             Button("Refresh permissions", action: refresh)
@@ -125,15 +115,13 @@ struct PermissionsView: View {
     }
 
     private func refresh() {
-        accessibility = Permissions.accessibilityGranted
         screenRecording = Permissions.screenRecordingGranted
     }
 }
 
 @MainActor
-func openPrivacySettings(_ permission: AskSession.Permission) {
-    let pane = permission == .accessibility ? "Privacy_Accessibility" : "Privacy_ScreenCapture"
-    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") {
+func openPrivacySettings() {
+    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
         NSWorkspace.shared.open(url)
     }
 }

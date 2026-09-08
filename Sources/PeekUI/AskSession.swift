@@ -4,134 +4,230 @@ import PeekCore
 
 @MainActor @Observable
 final class AskSession {
-    enum CaptureKind { case selection, region }
-    enum Permission: String { case accessibility, screenRecording }
-
     let providers: [any AIProvider]
-    var question = "Explain this"
-    private(set) var capture: Capture?
-    private(set) var answer = ""
+    var question = ""
+    private(set) var messages: [AIMessage] = []
+    private(set) var responseNotes: [UUID: String] = [:]
     private(set) var message: String?
-    private(set) var permission: Permission?
+    private(set) var needsScreenRecordingPermission = false
     private(set) var isStreaming = false
+    private(set) var isCapturing = false
     private(set) var providerID: ProviderID
     private(set) var model: String
+    private(set) var modes: [PromptMode]
+    private(set) var selectedModeID: UUID?
     var onPresent: (() -> Void)?
-    @ObservationIgnored private let selectionReader: any SelectionReader
+    var onSettingsChange: (() -> Void)?
     @ObservationIgnored private let regionCapturer: any ScreenRegionCapturer
     @ObservationIgnored private let settingsStore: any SettingsStore
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var generation = UUID()
+    private var retryUserID: UUID?
+    private var responseID: UUID?
 
-    init(selectionReader: any SelectionReader, regionCapturer: any ScreenRegionCapturer,
-         providers: [any AIProvider], settingsStore: any SettingsStore) {
-        self.selectionReader = selectionReader
+    var isBusy: Bool { isCapturing || isStreaming }
+    var canRetry: Bool { retryUserID != nil && !isBusy }
+    var canSend: Bool { !isBusy && !messages.isEmpty && !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var latestCapture: Capture? { messages.last(where: { !$0.captures.isEmpty })?.captures.last }
+
+    init(regionCapturer: any ScreenRegionCapturer, providers: [any AIProvider], settingsStore: any SettingsStore) {
         self.regionCapturer = regionCapturer
         self.providers = providers
         self.settingsStore = settingsStore
         let settings = settingsStore.load()
         providerID = settings.provider
         model = settings.model
+        modes = settings.modes
+        selectedModeID = settings.selectedMode?.id
     }
 
-    func begin(_ kind: CaptureKind) {
-        cancel()
-        let token = generation
-        capture = nil
-        answer = ""
-        message = nil
-        permission = nil
+    func refreshSettings() {
         let settings = settingsStore.load()
-        question = settings.defaultQuestion
+        modes = settings.modes
+        selectedModeID = settings.selectedMode?.id
+        guard !isBusy else { return }
         providerID = settings.provider
         model = settings.model
+    }
+
+    func selectMode(_ id: UUID?) {
+        guard !isBusy else { return }
+        var settings = settingsStore.load()
+        guard settings.modes.contains(where: { $0.id == id }) else { return }
+        settings.selectedModeID = id
+        settingsStore.save(settings)
+        refreshSettings()
+        onSettingsChange?()
+    }
+
+    func beginCapture() {
+        guard !isBusy else { return }
+        guard let prompt = screenshotPrompt() else { return }
+        let token = UUID()
+        generation = token
+        isCapturing = true
         task = Task { [weak self] in
             guard let self else { return }
             do {
-                let result: Capture
-                switch kind {
-                case .selection: result = try await selectionReader.readSelection()
-                case .region: result = try await regionCapturer.captureRegion()
-                }
+                let capture = try await regionCapturer.captureRegion()
                 guard generation == token, !Task.isCancelled else { return }
-                capture = result
+                isCapturing = false
+                appendScreenshots([capture], prompt: prompt)
                 onPresent?()
                 await stream(token: token)
             } catch {
                 guard generation == token, !Task.isCancelled else { return }
+                isCapturing = false
+                task = nil
                 switch error {
                 case CaptureError.cancelled, is CancellationError: return
-                case CaptureError.accessibilityPermissionDenied:
-                    permission = .accessibility
-                    message = "Allow Accessibility access so Peek can read selected text."
                 case CaptureError.screenRecordingPermissionDenied:
-                    permission = .screenRecording
+                    needsScreenRecordingPermission = true
                     message = "Allow Screen Recording access so Peek can capture a screen region."
-                case CaptureError.noSelection: message = "Select some text, then ask Peek again."
-                case CaptureError.failed(let detail): message = detail
-                default: message = error.localizedDescription
+                case CaptureError.failed(let detail):
+                    needsScreenRecordingPermission = false
+                    message = detail
+                default:
+                    needsScreenRecordingPermission = false
+                    message = error.localizedDescription
                 }
                 onPresent?()
             }
         }
     }
 
-    func send() {
-        guard capture != nil, !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        cancel()
-        let token = generation
-        task = Task { [weak self] in await self?.stream(token: token) }
+    func addScreenshots(_ pngImages: [Data]) {
+        guard !pngImages.isEmpty else { return }
+        guard !isBusy else {
+            reportInputError("Stop the current response before adding a screenshot.")
+            return
+        }
+        guard let prompt = screenshotPrompt() else { return }
+        let captures = pngImages.map { Capture(content: .image($0), anchor: nil, sourceBundleID: nil) }
+        appendScreenshots(captures, prompt: prompt)
+        startResponse()
+        onPresent?()
     }
 
-    func selectProvider(_ id: ProviderID) {
-        cancel()
-        providerID = id
-        model = ""
-        answer = ""
+    func reportInputError(_ text: String) {
+        message = text
+        needsScreenRecordingPermission = false
+    }
+
+    private func screenshotPrompt() -> String? {
+        refreshSettings()
+        guard let mode = modes.first(where: { $0.id == selectedModeID }),
+              !mode.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !mode.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            reportInputError("Add a mode with a name and prompt in Settings before capturing a screenshot.")
+            onPresent?()
+            return nil
+        }
+        return mode.prompt
+    }
+
+    private func appendScreenshots(_ captures: [Capture], prompt: String) {
+        messages.append(AIMessage(role: .user, text: prompt, captures: captures))
+        retryUserID = messages.last?.id
+        responseID = nil
         message = nil
-        let token = generation
-        task = Task { [weak self] in
-            guard let self, let provider = providers.first(where: { $0.id == id }) else { return }
-            do {
-                let models = try await provider.models()
-                guard generation == token, !Task.isCancelled else { return }
-                guard let first = models.first else {
-                    message = "No models available. Configure this provider in Settings."
-                    return
-                }
-                model = first.id
-            } catch {
-                guard generation == token, !Task.isCancelled else { return }
-                message = providerErrorMessage(error)
-            }
+        needsScreenRecordingPermission = false
+    }
+
+    func send() {
+        guard canSend else { return }
+        refreshSettings()
+        messages.append(AIMessage(role: .user, text: question.trimmingCharacters(in: .whitespacesAndNewlines)))
+        question = ""
+        retryUserID = messages.last?.id
+        responseID = nil
+        startResponse()
+    }
+
+    func retry() {
+        guard canRetry else { return }
+        refreshSettings()
+        startResponse()
+    }
+
+    func stop() {
+        guard isBusy else { return }
+        let wasStreaming = isStreaming
+        invalidateOperation()
+        if wasStreaming {
+            message = "Response stopped."
+            if let responseID { responseNotes[responseID] = "Stopped" }
         }
     }
 
-    func cancel() {
+    func close() {
+        invalidateOperation()
+        messages = []
+        responseNotes = [:]
+        question = ""
+        message = nil
+        needsScreenRecordingPermission = false
+        retryUserID = nil
+        responseID = nil
+    }
+
+    private func invalidateOperation() {
         generation = UUID()
         task?.cancel()
         task = nil
         isStreaming = false
+        isCapturing = false
+    }
+
+    private func startResponse() {
+        let token = UUID()
+        generation = token
+        isStreaming = true
+        task = Task { [weak self] in await self?.stream(token: token) }
     }
 
     private func stream(token: UUID) async {
-        answer = ""
+        guard generation == token, !Task.isCancelled,
+              let userIndex = messages.firstIndex(where: { $0.id == retryUserID }) else { return }
+        isStreaming = true
         message = nil
+        needsScreenRecordingPermission = false
+        defer {
+            if generation == token {
+                isStreaming = false
+                task = nil
+            }
+        }
         guard let provider = providers.first(where: { $0.id == providerID }), !model.isEmpty else {
             message = "Choose and configure a provider in Settings."
             return
         }
-        isStreaming = true
-        defer { if generation == token { isStreaming = false } }
+        let request = AIRequest(messages: Array(messages[...userIndex]), model: model)
+        let assistantID = responseID ?? UUID()
+        responseID = assistantID
+        messages.removeAll { $0.id == assistantID }
+        responseNotes[assistantID] = nil
         do {
-            for try await delta in provider.stream(AIRequest(question: question, capture: capture, model: model)) {
+            for try await delta in provider.stream(request) {
                 guard generation == token, !Task.isCancelled else { return }
-                answer += delta
+                if let index = messages.firstIndex(where: { $0.id == assistantID }) {
+                    messages[index].text += delta
+                } else if !delta.isEmpty {
+                    messages.append(AIMessage(id: assistantID, role: .assistant, text: delta))
+                }
             }
+            guard generation == token, !Task.isCancelled else { return }
+            retryUserID = nil
+            responseID = nil
         } catch {
             guard generation == token, !Task.isCancelled else { return }
-            if error is CancellationError || (error as? ProviderError) == .cancelled { return }
-            message = providerErrorMessage(error)
+            if error is CancellationError || (error as? ProviderError) == .cancelled {
+                message = "Response stopped."
+                responseNotes[assistantID] = "Stopped"
+            } else {
+                message = providerErrorMessage(error)
+                responseNotes[assistantID] = "Incomplete response"
+            }
         }
     }
 }

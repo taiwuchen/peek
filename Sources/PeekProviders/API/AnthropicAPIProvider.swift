@@ -41,16 +41,19 @@ public struct AnthropicAPIProvider: AIProvider {
 
     public func stream(_ request: AIRequest) -> AsyncThrowingStream<String, Error> {
         HTTP.stream(session: session, request: {
-            var content: [[String: Any]] = []
-            if case .image(let png)? = request.capture?.content {
-                content.append(["type": "image", "source": [
-                    "type": "base64", "media_type": "image/png", "data": png.base64EncodedString(),
-                ]])
+            let messages: [[String: Any]] = request.messages.map { message in
+                var content: [[String: Any]] = message.captures.map { capture in
+                    let png = switch capture.content { case .image(let data): data }
+                    return ["type": "image", "source": [
+                        "type": "base64", "media_type": "image/png", "data": png.base64EncodedString(),
+                    ]]
+                }
+                if !message.text.isEmpty { content.append(["type": "text", "text": message.text]) }
+                return ["role": message.role.rawValue, "content": content]
             }
-            content.append(["type": "text", "text": request.userText])
             return try HTTP.request(url: URL(string: "https://api.anthropic.com/v1/messages")!, headers: headers(), body: [
                 "model": request.model, "max_tokens": 8192, "stream": true,
-                "system": AIRequest.systemPrompt, "messages": [["role": "user", "content": content]],
+                "system": AIRequest.systemPrompt, "messages": messages,
             ])
         }, decode: Self.decode)
     }

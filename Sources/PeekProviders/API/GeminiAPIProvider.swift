@@ -36,18 +36,21 @@ public struct GeminiAPIProvider: AIProvider {
 
     public func stream(_ request: AIRequest) -> AsyncThrowingStream<String, Error> {
         HTTP.stream(session: session, endsOnEOF: true, request: {
-            var parts: [[String: Any]] = []
-            if case .image(let png)? = request.capture?.content {
-                parts.append(["inline_data": ["mime_type": "image/png", "data": png.base64EncodedString()]])
+            let contents: [[String: Any]] = request.messages.map { message in
+                var parts: [[String: Any]] = message.captures.map { capture in
+                    let png = switch capture.content { case .image(let data): data }
+                    return ["inline_data": ["mime_type": "image/png", "data": png.base64EncodedString()]]
+                }
+                if !message.text.isEmpty { parts.append(["text": message.text]) }
+                return ["role": message.role == .assistant ? "model" : "user", "parts": parts]
             }
-            parts.append(["text": request.userText])
             var components = URLComponents(string: "https://generativelanguage.googleapis.com/v1beta/models")!
             components.path += "/\(request.model):streamGenerateContent"
             components.queryItems = [URLQueryItem(name: "alt", value: "sse")]
             guard let url = components.url else { throw ProviderError.malformedResponse("Invalid Gemini model URL.") }
             return try HTTP.request(url: url, headers: headers(), body: [
                 "system_instruction": ["parts": [["text": AIRequest.systemPrompt]]],
-                "contents": [["role": "user", "parts": parts]],
+                "contents": contents,
             ])
         }, decode: Self.decode)
     }

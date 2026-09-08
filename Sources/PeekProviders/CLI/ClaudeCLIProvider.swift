@@ -43,10 +43,10 @@ public struct ClaudeCLIProvider: AIProvider {
                     var arguments = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                                      "--model", request.model, "--system-prompt", AIRequest.systemPrompt,
                                      "--safe-mode", "--no-session-persistence"]
-                    var prompt = request.userText
-                    if let image = directory.image {
+                    var prompt = directory.transcript
+                    if !directory.images.isEmpty {
                         arguments += ["--tools", "Read", "--allowedTools", "Read"]
-                        prompt = "View the image at \(image.path), then: \(prompt)"
+                        prompt = "View the screenshot files listed in the conversation before answering.\n\n" + prompt
                     } else {
                         arguments += ["--tools", ""]
                     }

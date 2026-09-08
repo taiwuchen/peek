@@ -28,14 +28,31 @@ public enum ProviderAvailability: Sendable, Equatable {
     case unavailable(String)
 }
 
+public struct AIMessage: Sendable, Equatable, Identifiable {
+    public enum Role: String, Sendable {
+        case user
+        case assistant
+    }
+
+    public let id: UUID
+    public let role: Role
+    public var text: String
+    public let captures: [Capture]
+
+    public init(id: UUID = UUID(), role: Role, text: String, captures: [Capture] = []) {
+        self.id = id
+        self.role = role
+        self.text = text
+        self.captures = captures
+    }
+}
+
 public struct AIRequest: Sendable {
-    public let question: String
-    public let capture: Capture?
+    public let messages: [AIMessage]
     public let model: String
 
-    public init(question: String, capture: Capture?, model: String) {
-        self.question = question
-        self.capture = capture
+    public init(messages: [AIMessage], model: String) {
+        self.messages = messages
         self.model = model
     }
 }
@@ -63,11 +80,5 @@ public protocol AIProvider: Sendable {
 
 extension AIRequest {
     /// System instruction shared by every provider.
-    public static let systemPrompt = "You are a concise assistant embedded in the user's macOS desktop. The user selected some text or captured part of their screen and is asking about it. Answer directly in plain Markdown. Do not restate the content."
-
-    /// The user turn text: the question plus any captured text, quoted. Image captures are attached separately by each provider.
-    public var userText: String {
-        guard case .text(let selected)? = capture?.content else { return question }
-        return "\(question)\n\n<selected_text>\n\(selected)\n</selected_text>"
-    }
+    public static let systemPrompt = "You are a concise assistant embedded in the user's macOS desktop. The user captures screen regions as screenshots and asks questions about them. Use the conversation history to answer follow-up questions, keeping each screenshot associated with the turn where it was shared. Answer the latest user message directly in plain Markdown. Do not restate the content."
 }

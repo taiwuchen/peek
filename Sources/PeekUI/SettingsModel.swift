@@ -21,6 +21,50 @@ final class SettingsModel {
         settings = store.load()
     }
 
+    @discardableResult
+    func addMode(name: String, prompt: String) -> Bool {
+        let mode = PromptMode(name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+                              prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard isUsable(mode) else { return false }
+        var updated = settings
+        updated.modes.append(mode)
+        updated.selectedModeID = mode.id
+        settings = updated
+        return true
+    }
+
+    @discardableResult
+    func updateMode(_ mode: PromptMode) -> Bool {
+        guard let index = settings.modes.firstIndex(where: { $0.id == mode.id }) else { return false }
+        let updated = PromptMode(id: mode.id, name: mode.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                                 prompt: mode.prompt.trimmingCharacters(in: .whitespacesAndNewlines))
+        guard isUsable(updated) else { return false }
+        settings.modes[index] = updated
+        return true
+    }
+
+    func canDeleteMode(id: UUID) -> Bool {
+        settings.modes.contains { $0.id == id }
+            && settings.modes.contains { $0.id != id && isUsable($0) }
+    }
+
+    @discardableResult
+    func deleteMode(id: UUID) -> Bool {
+        guard canDeleteMode(id: id) else { return false }
+        var updated = settings
+        updated.modes.removeAll { $0.id == id }
+        if updated.selectedModeID == id {
+            updated.selectedModeID = updated.modes.first(where: isUsable)?.id
+        }
+        settings = updated
+        return true
+    }
+
+    private func isUsable(_ mode: PromptMode) -> Bool {
+        !mode.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !mode.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     func refreshAvailability() async {
         for provider in providers {
             let status = await provider.availability()

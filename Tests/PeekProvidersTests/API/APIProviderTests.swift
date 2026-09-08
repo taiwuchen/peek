@@ -30,8 +30,8 @@ struct APIProviderTests {
         try credentials.setAPIKey("test-key", for: id)
         let provider = apiProvider(id, credentials: credentials, session: session)
         let png = Data([137, 80, 78, 71, 0, 1, 2])
-        let capture = Capture(content: image ? .image(png) : .text("selected <content>"), anchor: nil, sourceBundleID: nil)
-        let request = AIRequest(question: "Explain this", capture: capture, model: "test-model")
+        let capture = Capture(content: .image(png), anchor: nil, sourceBundleID: nil)
+        let request = AIRequest(messages: [AIMessage(role: .user, text: "Explain this", captures: image ? [capture] : [])], model: "test-model")
         var deltas: [String] = []
         for try await delta in provider.stream(request) { deltas.append(delta) }
         #expect(deltas == ["Hello", " 世界", "!"])
@@ -93,7 +93,69 @@ struct APIProviderTests {
         default: return
         }
         #expect(blocks.count == (image ? 2 : 1))
-        #expect(blocks.last?["text"] as? String == request.userText)
+        #expect(blocks.last?["text"] as? String == request.messages[0].text)
+    }
+
+    @Test(arguments: hostedIDs)
+    func conversationPreservesRolesTextAndScreenshotTurns(id: ProviderID) async throws {
+        let stub = APIStub(body: fixture(id))
+        let session = stub.session()
+        defer { session.invalidateAndCancel(); stub.remove() }
+        let credentials = InMemoryCredentialStore()
+        try credentials.setAPIKey("test-key", for: id)
+        let provider = apiProvider(id, credentials: credentials, session: session)
+        let conversation = ConversationFixture()
+        for try await _ in provider.stream(conversation.request) {}
+        let sent = try #require(stub.requests.first)
+        let object = try requestObject(sent)
+        let key = id == .anthropicAPI ? "messages" : id == .openAIAPI ? "input" : "contents"
+        let messages = try #require(object[key] as? [[String: Any]])
+        let assistantRole = id == .geminiAPI ? "model" : "assistant"
+        #expect(messages.compactMap { $0["role"] as? String } == ["user", assistantRole, "user", assistantRole, "user"])
+        let expectedImages = [[conversation.images[0]], [], [], [], [conversation.images[1], conversation.images[2]]]
+        try #require(messages.count == expectedImages.count)
+        for (index, message) in messages.enumerated() {
+            let blocks = try #require(message[id == .geminiAPI ? "parts" : "content"] as? [[String: Any]])
+            #expect(blocks.count == expectedImages[index].count + 1)
+            #expect(blocks.last?["text"] as? String == conversation.texts[index])
+            if id != .geminiAPI {
+                #expect(blocks.last?["type"] as? String == (id == .openAIAPI ? "input_text" : "text"))
+            }
+            for (imageIndex, png) in expectedImages[index].enumerated() {
+                let block = blocks[imageIndex]
+                switch id {
+                case .anthropicAPI:
+                    #expect(block["type"] as? String == "image")
+                    #expect(block["source"] as? [String: String] == ["type": "base64", "media_type": "image/png", "data": png.base64EncodedString()])
+                case .openAIAPI:
+                    #expect(block["type"] as? String == "input_image")
+                    #expect(block["image_url"] as? String == "data:image/png;base64,\(png.base64EncodedString())")
+                case .geminiAPI:
+                    #expect(block["inline_data"] as? [String: String] == ["mime_type": "image/png", "data": png.base64EncodedString()])
+                default: break
+                }
+            }
+        }
+        #expect(object["previous_response_id"] == nil)
+        #expect(object["conversation"] == nil)
+    }
+
+    @Test(arguments: hostedIDs)
+    func screenshotWithoutTextOmitsEmptyTextBlock(id: ProviderID) async throws {
+        let stub = APIStub(body: fixture(id))
+        let session = stub.session()
+        defer { session.invalidateAndCancel(); stub.remove() }
+        let credentials = InMemoryCredentialStore()
+        try credentials.setAPIKey("test-key", for: id)
+        let provider = apiProvider(id, credentials: credentials, session: session)
+        let capture = Capture(content: .image(Data([1])), anchor: nil, sourceBundleID: nil)
+        for try await _ in provider.stream(AIRequest(messages: [AIMessage(role: .user, text: "", captures: [capture])], model: "test")) {}
+        let object = try requestObject(#require(stub.requests.first))
+        let key = id == .anthropicAPI ? "messages" : id == .openAIAPI ? "input" : "contents"
+        let messages = try #require(object[key] as? [[String: Any]])
+        let blocks = try #require(messages.first?[id == .geminiAPI ? "parts" : "content"] as? [[String: Any]])
+        #expect(blocks.count == 1)
+        #expect(blocks.first?["text"] == nil)
     }
 
     @Test(arguments: hostedIDs)
@@ -106,7 +168,7 @@ struct APIProviderTests {
         try credentials.setAPIKey("test-key", for: id)
         let provider = apiProvider(id, credentials: credentials, session: session)
         await #expect(throws: ProviderError.http(status: 429, body: body)) {
-            for try await _ in provider.stream(AIRequest(question: "test", capture: nil, model: "model")) {}
+            for try await _ in provider.stream(AIRequest(messages: [AIMessage(role: .user, text: "test")], model: "model")) {}
         }
     }
 
@@ -117,7 +179,7 @@ struct APIProviderTests {
         defer { session.invalidateAndCancel(); stub.remove() }
         let provider = apiProvider(id, credentials: InMemoryCredentialStore(), session: session)
         await #expect(throws: ProviderError.notAvailable(.needsAPIKey)) {
-            for try await _ in provider.stream(AIRequest(question: "test", capture: nil, model: "model")) {}
+            for try await _ in provider.stream(AIRequest(messages: [AIMessage(role: .user, text: "test")], model: "model")) {}
         }
         #expect(stub.requests.isEmpty)
     }
@@ -162,7 +224,7 @@ struct APIProviderTests {
         let provider = apiProvider(id, credentials: credentials, session: session)
         let task = Task {
             var text = ""
-            for try await delta in provider.stream(AIRequest(question: "test", capture: nil, model: "model")) { text += delta }
+            for try await delta in provider.stream(AIRequest(messages: [AIMessage(role: .user, text: "test")], model: "model")) { text += delta }
             return text
         }
         defer { task.cancel() }
@@ -181,7 +243,7 @@ struct APIProviderTests {
         let provider = apiProvider(id, credentials: credentials, session: session)
         let task = Task {
             do {
-                for try await _ in provider.stream(AIRequest(question: "test", capture: nil, model: "model")) {}
+                for try await _ in provider.stream(AIRequest(messages: [AIMessage(role: .user, text: "test")], model: "model")) {}
             } catch {}
         }
         try await waitForStub { !stub.requests.isEmpty }
@@ -198,7 +260,7 @@ struct APIProviderTests {
         try credentials.setAPIKey("test-key", for: id)
         let provider = apiProvider(id, credentials: credentials, session: session)
         do {
-            for try await _ in provider.stream(AIRequest(question: "test", capture: nil, model: "model")) {}
+            for try await _ in provider.stream(AIRequest(messages: [AIMessage(role: .user, text: "test")], model: "model")) {}
             Issue.record("Expected a malformed response error.")
         } catch let error as ProviderError {
             guard case .malformedResponse(let detail) = error else {

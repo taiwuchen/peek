@@ -50,9 +50,9 @@ public struct CodexCLIProvider: AIProvider {
                     defer { directory.remove() }
                     var arguments = ["exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only",
                                      "--ephemeral", "--ignore-user-config", "-m", request.model]
-                    if let image = directory.image { arguments += ["-i", image.path] }
+                    for image in directory.images { arguments += ["-i", image.path] }
                     arguments += ["-"]
-                    let prompt = AIRequest.systemPrompt + "\n\n" + request.userText
+                    let prompt = AIRequest.systemPrompt + "\n\n" + directory.transcript
                     let process = Subprocess(executable: path, arguments: arguments, input: Data(prompt.utf8), directory: directory.url)
                     let events = CodexCLIEvents()
                     for try await line in process.lines() {

@@ -1,10 +1,9 @@
 import CoreGraphics
 import Foundation
 
-/// Something the user pointed at: selected text or a region of the screen.
+/// A region of the screen captured by the user.
 public struct Capture: Sendable, Equatable {
     public enum Content: Sendable, Equatable {
-        case text(String)
         /// PNG-encoded image data.
         case image(Data)
     }
@@ -23,16 +22,9 @@ public struct Capture: Sendable, Equatable {
 }
 
 public enum CaptureError: Error, Sendable, Equatable {
-    case accessibilityPermissionDenied
     case screenRecordingPermissionDenied
-    case noSelection
     case cancelled
     case failed(String)
-}
-
-/// Reads the current text selection from the frontmost app.
-public protocol SelectionReader: Sendable {
-    func readSelection() async throws -> Capture
 }
 
 /// Lets the user drag out a screen region and returns it as an image.

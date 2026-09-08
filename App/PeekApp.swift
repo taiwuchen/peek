@@ -20,7 +20,6 @@ final class PeekAppDelegate: NSObject, NSApplicationDelegate {
         let settings = UserDefaultsSettingsStore()
         let credentials = KeychainCredentialStore()
         let controller = AppController(
-            selectionReader: AccessibilitySelectionReader(),
             regionCapturer: RegionCapturer(),
             providers: apiProviders(credentials: credentials) + cliProviders(settings: settings),
             settingsStore: settings,
