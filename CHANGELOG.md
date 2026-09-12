@@ -3,13 +3,13 @@
 Notable changes to Peek. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and Peek aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.1.0] - 2026-09-12
 
-First public version. No signed build has been published yet.
+First public version. The DMG is unsigned and not notarized.
 
 ### Added
 
-- Capture a screen region with a global hotkey (<kbd>⌥</kbd><kbd>⇧</kbd><kbd>Space</kbd>) or from the menu bar.
+- Capture a screen region with a customizable global shortcut (<kbd>⌥</kbd><kbd>⇧</kbd><kbd>Space</kbd> by default) or from the menu bar.
 - Multi-turn conversation in a movable, resizable floating panel. Each capture opens its own panel; screenshots and answers persist until that panel is closed.
 - Prompt modes: named name-and-prompt pairs, sent automatically with each new screenshot. Switchable from the panel, editable in Settings.
 - Each mode can have its own global shortcut, which selects the mode and starts a capture.
@@ -21,3 +21,5 @@ First public version. No signed build has been published yet.
 - Your messages sit on the right of the conversation, Peek's on the left. The whole panel header drags the window.
 - CLI subscription providers are listed before hosted API providers in Settings.
 - Debug builds are signed with an Apple Development certificate so the Screen Recording grant survives rebuilds.
+
+[0.1.0]: https://github.com/taiwuchen/peek/releases/tag/v0.1.0

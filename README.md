@@ -16,7 +16,7 @@ Peek is a macOS menu bar app with no Dock icon. It stays out of the way until yo
 
 ## How it works
 
-1. Press <kbd>⌥</kbd><kbd>⇧</kbd><kbd>Space</kbd> (or pick **Ask about screen region** from the menu bar) and drag over part of the screen.
+1. Use the active mode's shortcut or pick **Ask about screen region** from the menu bar, then drag over part of the screen. The default shortcut is <kbd>⌥</kbd><kbd>⇧</kbd><kbd>Space</kbd>, and you can change it in Settings.
 2. The screenshot goes straight to your provider with the active prompt mode — no typing needed for the common case.
 3. The answer streams into a floating panel. Ask follow-ups, or add more screenshots by pasting or dragging them anywhere onto the panel.
 
@@ -52,7 +52,9 @@ Peek reads your screen and talks to model providers, so the boundaries are worth
 
 ## Install
 
-Peek is pre-release: there is no signed download yet, so build it from source (below). Notarized builds will land on the [Releases](https://github.com/taiwuchen/peek/releases) page once the app settles down.
+Download the latest DMG from [Releases](https://github.com/taiwuchen/peek/releases). Peek is pre-release and is not signed or notarized yet.
+
+On first launch, macOS will block the unsigned app. Open **System Settings → Privacy & Security**, find the message about Peek, select **Open Anyway**, then confirm **Open**. Only bypass this warning for a DMG downloaded from this repository.
 
 Requires **macOS 15 or later**. On first use, grant **Screen Recording** access so Peek can capture a region — the panel links straight to the right System Settings pane if the permission is missing.
 
