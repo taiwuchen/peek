@@ -29,7 +29,7 @@ targets:
       properties:
         CFBundleName: Peek
         CFBundleDisplayName: Peek
-        CFBundleShortVersionString: "0.1.0"
+        CFBundleShortVersionString: "0.1.1"
         CFBundleVersion: "1"
         LSMinimumSystemVersion: "15.0"
         LSUIElement: true
@@ -44,7 +44,7 @@ targets:
       base:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_BUNDLE_IDENTIFIER: com.taiwu.peek
-        MARKETING_VERSION: "0.1.0"
+        MARKETING_VERSION: "0.1.1"
         CURRENT_PROJECT_VERSION: 1
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete

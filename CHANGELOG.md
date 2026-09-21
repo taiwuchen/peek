@@ -3,9 +3,19 @@
 Notable changes to Peek. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and Peek aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-09-21
+
+### Fixed
+
+- Release builds are signed with an Apple Development certificate. The 0.1.0 DMG was unsigned, so macOS never honored its Screen Recording grant and the app could not capture. The DMG is still not notarized.
+
+### Added
+
+- `scripts/build-release.sh` builds the signed Release app and DMG.
+
 ## [0.1.0] - 2026-09-12
 
-First public version. The DMG is unsigned and not notarized.
+First public version. The DMG is unsigned and not notarized. Screen Recording does not work; use 0.1.1.
 
 ### Added
 
@@ -22,4 +32,5 @@ First public version. The DMG is unsigned and not notarized.
 - CLI subscription providers are listed before hosted API providers in Settings.
 - Debug builds are signed with an Apple Development certificate so the Screen Recording grant survives rebuilds.
 
+[0.1.1]: https://github.com/taiwuchen/peek/releases/tag/v0.1.1
 [0.1.0]: https://github.com/taiwuchen/peek/releases/tag/v0.1.0
