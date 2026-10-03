@@ -41,7 +41,8 @@ struct ConversationView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         ForEach(session.messages) { message in
-                            ConversationTurn(message: message, note: session.responseNotes[message.id])
+                            ConversationTurn(message: message, addedContext: session.addedContext[message.id],
+                                             note: session.responseNotes[message.id])
                         }
                         if session.isStreaming {
                             ProgressView("Responding…").controlSize(.small)
@@ -83,9 +84,30 @@ struct ConversationView: View {
                         Button("Settings", action: openSettings)
                     }
                 }
+                if !session.draft.isEmpty {
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(session.draft.enumerated()), id: \.offset) { index, capture in
+                                AttachmentPreview(content: capture.content, maxWidth: 120, maxHeight: 56)
+                                    .padding(6)
+                                    .overlay(alignment: .topTrailing) {
+                                        Button { session.removeDraftAttachment(at: index) } label: {
+                                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Remove attachment")
+                                        .accessibilityLabel("Remove attachment")
+                                    }
+                            }
+                        }
+                    }
+                    .scrollIndicators(.hidden)
+                }
                 HStack(alignment: .bottom) {
-                    ChatComposer(text: $session.question, onSubmit: { session.send() },
-                                 onImages: { session.addScreenshots($0) },
+                    ChatComposer(text: $session.question,
+                                 placeholder: session.draft.isEmpty ? "Ask a follow-up" : "Add context, then press Enter",
+                                 onSubmit: { session.send() },
+                                 onAttachments: { session.addAttachments($0) },
                                  onError: { session.reportInputError($0) })
                         .frame(maxWidth: .infinity)
                     if session.isBusy {
@@ -112,6 +134,7 @@ struct ConversationView: View {
 
 private struct ConversationTurn: View {
     let message: AIMessage
+    let addedContext: String?
     let note: String?
 
     private var isUser: Bool { message.role == .user }
@@ -142,22 +165,41 @@ private struct ConversationTurn: View {
                 }
             }
             ForEach(Array(message.captures.enumerated()), id: \.offset) { _, capture in
-                if case .image(let data) = capture.content, let image = NSImage(data: data) {
-                    Image(nsImage: image).resizable().scaledToFit()
-                        .frame(maxWidth: 200, maxHeight: 120, alignment: isUser ? .trailing : .leading)
-                        .accessibilityLabel("Captured screen region")
-                } else {
-                    Label("Screen region", systemImage: "viewfinder")
-                }
+                AttachmentPreview(content: capture.content, maxWidth: 200, maxHeight: 120)
+                    .frame(maxWidth: 200, alignment: isUser ? .trailing : .leading)
             }
             if isUser {
-                if message.captures.isEmpty {
-                    Text(message.text).multilineTextAlignment(.trailing).textSelection(.enabled)
+                if let text = message.captures.isEmpty ? message.text : addedContext {
+                    Text(text).multilineTextAlignment(.trailing).textSelection(.enabled)
                 }
             } else {
                 MarkdownAnswer(text: message.text)
                 if let note { Text(note).font(.caption).foregroundStyle(.secondary) }
             }
+        }
+    }
+}
+
+/// A screenshot thumbnail, or a labelled icon for an attached file.
+private struct AttachmentPreview: View {
+    let content: Capture.Content
+    let maxWidth: CGFloat
+    let maxHeight: CGFloat
+
+    var body: some View {
+        switch content {
+        case .image(let data):
+            if let image = NSImage(data: data) {
+                Image(nsImage: image).resizable().scaledToFit()
+                    .frame(maxWidth: maxWidth, maxHeight: maxHeight)
+                    .accessibilityLabel("Screenshot")
+            } else {
+                Label("Screen region", systemImage: "viewfinder")
+            }
+        case .pdf(let name, _):
+            Label(name, systemImage: "doc.richtext").lineLimit(1).frame(maxWidth: maxWidth)
+        case .text(let name, _):
+            Label(name, systemImage: "doc.text").lineLimit(1).frame(maxWidth: maxWidth)
         }
     }
 }

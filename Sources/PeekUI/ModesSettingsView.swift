@@ -38,12 +38,14 @@ struct ModesSettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
         .sheet(item: $editedMode) { mode in
-            ModeEditor(mode: mode) { name, prompt in
-                model.updateMode(PromptMode(id: mode.id, name: name, prompt: prompt))
+            ModeEditor(mode: mode) { name, prompt, waitsForContext in
+                model.updateMode(PromptMode(id: mode.id, name: name, prompt: prompt, waitsForContext: waitsForContext))
             }
         }
         .sheet(isPresented: $isCreating) {
-            ModeEditor { name, prompt in model.addMode(name: name, prompt: prompt) }
+            ModeEditor { name, prompt, waitsForContext in
+                model.addMode(name: name, prompt: prompt, waitsForContext: waitsForContext)
+            }
         }
     }
 }
@@ -52,12 +54,14 @@ private struct ModeEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var prompt: String
+    @State private var waitsForContext: Bool
     private let isNew: Bool
-    private let save: (String, String) -> Bool
+    private let save: (String, String, Bool) -> Bool
 
-    init(mode: PromptMode? = nil, save: @escaping (String, String) -> Bool) {
+    init(mode: PromptMode? = nil, save: @escaping (String, String, Bool) -> Bool) {
         _name = State(initialValue: mode?.name ?? "")
         _prompt = State(initialValue: mode?.prompt ?? "")
+        _waitsForContext = State(initialValue: mode?.waitsForContext ?? false)
         isNew = mode == nil
         self.save = save
     }
@@ -72,13 +76,16 @@ private struct ModeEditor: View {
                 .frame(minHeight: 160)
                 .border(.separator)
                 .accessibilityLabel("Prompt")
+            Toggle("Add context before sending", isOn: $waitsForContext)
+            Text("When on, a screenshot waits in the composer so you can add text, images, or files, then press Enter to send.")
+                .font(.caption).foregroundStyle(.secondary)
             Text("A name and prompt are required. Changes take effect when you save.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Save") {
-                    if save(name, prompt) { dismiss() }
+                    if save(name, prompt, waitsForContext) { dismiss() }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

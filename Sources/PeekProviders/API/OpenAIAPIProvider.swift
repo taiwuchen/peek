@@ -43,9 +43,16 @@ public struct OpenAIAPIProvider: AIProvider {
     public func stream(_ request: AIRequest) -> AsyncThrowingStream<String, Error> {
         HTTP.stream(session: session, request: {
             let input: [[String: Any]] = request.messages.map { message in
-                var content: [[String: Any]] = message.captures.map { capture in
-                    let png = switch capture.content { case .image(let data): data }
-                    return ["type": "input_image", "image_url": "data:image/png;base64,\(png.base64EncodedString())"]
+                var content: [[String: Any]] = message.captures.map { capture -> [String: Any] in
+                    switch capture.content {
+                    case .image(let png):
+                        ["type": "input_image", "image_url": "data:image/png;base64,\(png.base64EncodedString())"]
+                    case .pdf(let name, let data):
+                        ["type": "input_file", "filename": name,
+                         "file_data": "data:application/pdf;base64,\(data.base64EncodedString())"]
+                    case .text(let name, let text):
+                        ["type": "input_text", "text": attachedText(name: name, text: text)]
+                    }
                 }
                 if !message.text.isEmpty { content.append(["type": "input_text", "text": message.text]) }
                 return ["role": message.role.rawValue, "content": content]

@@ -334,7 +334,7 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     let history = session.messages
     session.question = "My next question"
     let images = [Data([4, 5, 6]), Data([7, 8, 9])]
-    session.addScreenshots(images)
+    session.addAttachments(images.map(Capture.Content.image))
     try await waitUntil { !session.isBusy }
     #expect(Array(session.messages.prefix(2)) == history)
     #expect(session.messages.count == 4)
@@ -351,16 +351,16 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
     defer { continuation.finish() }
     let session = makeSession(provider: TestProvider(respond: { _ in stream }))
-    session.addScreenshots([Data([1])])
+    session.addAttachments([.image(Data([1]))])
     try await waitUntil { session.isStreaming }
     let history = session.messages
-    session.addScreenshots([Data([2])])
+    session.addAttachments([.image(Data([2]))])
     #expect(session.messages == history)
     #expect(session.message?.contains("Stop") == true)
     #expect(session.isStreaming)
     session.stop()
     let invalid = makeSession(settings: AppSettings(modes: []))
-    invalid.addScreenshots([Data([1])])
+    invalid.addAttachments([.image(Data([1]))])
     #expect(invalid.messages.isEmpty)
     #expect(!invalid.isBusy)
     #expect(invalid.message?.contains("name and prompt") == true)
@@ -393,4 +393,98 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     #expect(sent[1].messages.count == 2)
     #expect(sent[1].messages.allSatisfy { $0.role == .user })
     #expect(sent[1].messages.first?.captures == [Region().capture])
+}
+
+@Test @MainActor func waitingModeHoldsCaptureUntilSendWithPromptTextAndAttachments() async throws {
+    let requests = Mutex<[AIRequest]>([])
+    let mode = PromptMode(name: "Explain", prompt: "Explain this", waitsForContext: true)
+    let session = makeSession(provider: TestProvider(respond: { request in
+        requests.withLock { $0.append(request) }
+        return AsyncThrowingStream { $0.yield("Answer"); $0.finish() }
+    }), settings: AppSettings(modes: [mode], selectedModeID: mode.id))
+    var presented = 0
+    session.onPresent = { presented += 1 }
+    session.beginCapture()
+    try await waitUntil { !session.isBusy }
+    #expect(session.messages.isEmpty)
+    #expect(session.draft == [Region().capture])
+    #expect(session.latestCapture == Region().capture)
+    #expect(presented == 1)
+    #expect(session.canSend)
+    let notes = Capture.Content.text(name: "notes.txt", text: "Context")
+    session.addAttachments([.image(Data([4])), notes])
+    session.removeDraftAttachment(at: 1)
+    #expect(session.draft.map(\.content) == [Region().capture.content, notes])
+    #expect(requests.withLock { $0.isEmpty })
+    let draft = session.draft
+    session.removeDraftAttachment(at: 1)
+    session.removeDraftAttachment(at: 0)
+    session.question = "Only text"
+    #expect(session.canSend)
+    session.addAttachments(draft.map(\.content))
+    session.question = "  Focus on the error  "
+    session.send()
+    try await waitUntil { !session.isBusy }
+    let sent = try #require(requests.withLock { $0.first })
+    let user = try #require(sent.messages.last)
+    #expect(user.text == "Explain this\n\nFocus on the error")
+    #expect(user.captures.map(\.content) == [Region().capture.content, notes])
+    #expect(session.addedContext[user.id] == "Focus on the error")
+    #expect(session.draft.isEmpty)
+    #expect(session.question.isEmpty)
+    #expect(session.messages.count == 2)
+}
+
+@Test @MainActor func waitingModeHoldsAttachmentsAddedWhileStreamingAndSendsPromptAlone() async throws {
+    let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
+    let requests = Mutex<[AIRequest]>([])
+    let mode = PromptMode(name: "Explain", prompt: "Explain this", waitsForContext: true)
+    let session = makeSession(provider: TestProvider(respond: { request in
+        let count = requests.withLock { $0.append(request); return $0.count }
+        return count == 1 ? stream : AsyncThrowingStream { $0.yield("Second"); $0.finish() }
+    }), settings: AppSettings(modes: [mode], selectedModeID: mode.id))
+    session.beginCapture()
+    try await waitUntil { !session.isBusy }
+    session.send()
+    try await waitUntil { session.isStreaming }
+    session.addAttachments([.image(Data([5]))])
+    #expect(session.draft.count == 1)
+    #expect(session.message == nil)
+    #expect(!session.canSend)
+    continuation.yield("First")
+    continuation.finish()
+    try await waitUntil { !session.isBusy }
+    session.send()
+    try await waitUntil { !session.isBusy }
+    let sent = requests.withLock { $0 }
+    #expect(sent.count == 2)
+    #expect(sent[0].messages.last?.text == "Explain this")
+    #expect(sent[1].messages.last?.text == "Explain this")
+    #expect(sent[1].messages.last?.captures.map(\.content) == [.image(Data([5]))])
+    #expect(session.addedContext.isEmpty)
+}
+
+@Test @MainActor func pendingDraftKeepsItsModeWhenAnotherConversationChangesSelection() async throws {
+    let requests = Mutex<[AIRequest]>([])
+    let review = PromptMode(name: "Review", prompt: "Review this", waitsForContext: true)
+    let translate = PromptMode(name: "Translate", prompt: "Translate this")
+    let store = UserDefaultsSettingsStore(defaults: UserDefaults(suiteName: "PeekUITests.\(UUID())")!)
+    store.save(AppSettings(modes: [review, translate], selectedModeID: review.id))
+    let session = AskSession(regionCapturer: Region(), providers: [TestProvider(respond: { request in
+        requests.withLock { $0.append(request) }
+        return AsyncThrowingStream { $0.yield("Answer"); $0.finish() }
+    })], settingsStore: store)
+    session.beginCapture()
+    try await waitUntil { !session.isBusy }
+    var settings = store.load()
+    settings.selectedModeID = translate.id
+    store.save(settings)
+    session.addAttachments([.image(Data([6]))])
+    #expect(session.draft.count == 2)
+    #expect(requests.withLock { $0.isEmpty })
+    session.send()
+    try await waitUntil { !session.isBusy }
+    let sent = try #require(requests.withLock { $0.first })
+    #expect(sent.messages.last?.text == "Review this")
+    #expect(sent.messages.last?.captures.count == 2)
 }

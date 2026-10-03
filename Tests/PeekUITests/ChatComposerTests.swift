@@ -23,7 +23,7 @@ struct ChatComposerTests {
         let selection = NSRange(location: 5, length: 2)
         input.setSelectedRange(selection)
         var images: [Data] = []
-        input.onImages = { images = $0 }
+        input.onAttachments = { images = $0.compactMap(\.imageData) }
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         pasteboard.setData(try composerImageData(), forType: .png)
@@ -84,7 +84,7 @@ struct ChatComposerTests {
         let window = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 140),
                              styleMask: [.borderless, .resizable], backing: .buffered, defer: false)
         defer { window.close() }
-        let host = NSHostingView(rootView: ChatComposer(text: .constant("draft"), onSubmit: {}, onImages: { _ in }, onError: { _ in }))
+        let host = NSHostingView(rootView: ChatComposer(text: .constant("draft"), onSubmit: {}, onAttachments: { _ in }, onError: { _ in }))
         window.contentView = host
         host.layoutSubtreeIfNeeded()
         #expect(window.firstResponder is ComposerTextView)
@@ -92,7 +92,7 @@ struct ChatComposerTests {
 
     @Test func composerHeightGrowsAndCaps() {
         func height(_ text: String) -> CGFloat {
-            let host = NSHostingView(rootView: ChatComposer(text: .constant(text), onSubmit: {}, onImages: { _ in }, onError: { _ in })
+            let host = NSHostingView(rootView: ChatComposer(text: .constant(text), onSubmit: {}, onAttachments: { _ in }, onError: { _ in })
                 .frame(width: 240))
             return host.fittingSize.height
         }

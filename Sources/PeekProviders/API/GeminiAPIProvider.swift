@@ -37,9 +37,15 @@ public struct GeminiAPIProvider: AIProvider {
     public func stream(_ request: AIRequest) -> AsyncThrowingStream<String, Error> {
         HTTP.stream(session: session, endsOnEOF: true, request: {
             let contents: [[String: Any]] = request.messages.map { message in
-                var parts: [[String: Any]] = message.captures.map { capture in
-                    let png = switch capture.content { case .image(let data): data }
-                    return ["inline_data": ["mime_type": "image/png", "data": png.base64EncodedString()]]
+                var parts: [[String: Any]] = message.captures.map { capture -> [String: Any] in
+                    switch capture.content {
+                    case .image(let png):
+                        ["inline_data": ["mime_type": "image/png", "data": png.base64EncodedString()]]
+                    case .pdf(_, let data):
+                        ["inline_data": ["mime_type": "application/pdf", "data": data.base64EncodedString()]]
+                    case .text(let name, let text):
+                        ["text": attachedText(name: name, text: text)]
+                    }
                 }
                 if !message.text.isEmpty { parts.append(["text": message.text]) }
                 return ["role": message.role == .assistant ? "model" : "user", "parts": parts]

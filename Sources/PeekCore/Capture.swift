@@ -1,11 +1,15 @@
 import CoreGraphics
 import Foundation
 
-/// A region of the screen captured by the user.
+/// Content the user attached to a message: a captured screen region, an image, or a file.
 public struct Capture: Sendable, Equatable {
     public enum Content: Sendable, Equatable {
         /// PNG-encoded image data.
         case image(Data)
+        /// A PDF file and its file name.
+        case pdf(name: String, data: Data)
+        /// A UTF-8 text file and its file name.
+        case text(name: String, text: String)
     }
 
     public let content: Content

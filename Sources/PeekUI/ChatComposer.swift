@@ -1,10 +1,12 @@
 import AppKit
+import PeekCore
 import SwiftUI
 
 struct ChatComposer: NSViewRepresentable {
     @Binding var text: String
+    var placeholder = "Ask a follow-up"
     let onSubmit: () -> Void
-    let onImages: ([Data]) -> Void
+    let onAttachments: ([Capture.Content]) -> Void
     let onError: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -31,7 +33,6 @@ struct ChatComposer: NSViewRepresentable {
         input.autoresizingMask = [.width]
         input.textContainer?.widthTracksTextView = true
         input.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
-        input.setAccessibilityLabel("Ask a follow-up")
         input.delegate = context.coordinator
         scrollView.documentView = input
         updateNSView(scrollView, context: context)
@@ -42,8 +43,13 @@ struct ChatComposer: NSViewRepresentable {
         context.coordinator.composer = self
         guard let input = scrollView.documentView as? ComposerTextView else { return }
         input.onSubmit = onSubmit
-        input.onImages = onImages
+        input.onAttachments = onAttachments
         input.onError = onError
+        if input.placeholder != placeholder {
+            input.placeholder = placeholder
+            input.setAccessibilityLabel(placeholder)
+            input.needsDisplay = true
+        }
         if input.string != text {
             input.string = text
             input.needsDisplay = true
@@ -81,41 +87,42 @@ struct ChatComposer: NSViewRepresentable {
 @MainActor
 final class ComposerTextView: NSTextView {
     var onSubmit: () -> Void = {}
-    var onImages: ([Data]) -> Void = { _ in }
+    var onAttachments: ([Capture.Content]) -> Void = { _ in }
+    var placeholder = ""
     var onError: (String) -> Void = { _ in }
 
     override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
-        ScreenshotInput.dragTypes + super.readablePasteboardTypes
+        AttachmentInput.dragTypes + super.readablePasteboardTypes
     }
 
     override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
-        ScreenshotInput.dragTypes + super.acceptableDragTypes
+        AttachmentInput.dragTypes + super.acceptableDragTypes
     }
 
     override func readSelection(from pasteboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
-        if attachImages(from: pasteboard) { return true }
+        if attachFiles(from: pasteboard) { return true }
         return super.readSelection(from: pasteboard, type: type)
     }
 
-    /// A plain text view refuses image drags outright, so claim them before it can.
+    /// A plain text view refuses image drags and inserts file paths, so claim attachments before it can.
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        guard ScreenshotInput.containsImages(sender.draggingPasteboard) else { return super.draggingEntered(sender) }
+        guard AttachmentInput.containsAttachments(sender.draggingPasteboard) else { return super.draggingEntered(sender) }
         return .copy
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        guard ScreenshotInput.containsImages(sender.draggingPasteboard) else {
+        guard AttachmentInput.containsAttachments(sender.draggingPasteboard) else {
             return super.performDragOperation(sender)
         }
-        return attachImages(from: sender.draggingPasteboard)
+        return attachFiles(from: sender.draggingPasteboard)
     }
 
-    /// Attaches any screenshots on `pasteboard`, leaving the draft text untouched.
-    /// Returns whether the pasteboard was handled as image input.
-    func attachImages(from pasteboard: NSPasteboard) -> Bool {
+    /// Attaches any images or files on `pasteboard`, leaving the draft text untouched.
+    /// Returns whether the pasteboard was handled as attachment input.
+    func attachFiles(from pasteboard: NSPasteboard) -> Bool {
         do {
-            guard let images = try ScreenshotInput.pngImages(from: pasteboard) else { return false }
-            onImages(images)
+            guard let contents = try AttachmentInput.attachments(from: pasteboard) else { return false }
+            onAttachments(contents)
         } catch {
             onError(error.localizedDescription)
         }
@@ -161,6 +168,6 @@ final class ComposerTextView: NSTextView {
             .foregroundColor: NSColor.placeholderTextColor,
         ]
         let origin = NSPoint(x: textContainerInset.width + (textContainer?.lineFragmentPadding ?? 0), y: textContainerInset.height)
-        ("Ask a follow-up" as NSString).draw(at: origin, withAttributes: attributes)
+        (placeholder as NSString).draw(at: origin, withAttributes: attributes)
     }
 }

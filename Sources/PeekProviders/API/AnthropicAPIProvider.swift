@@ -42,11 +42,19 @@ public struct AnthropicAPIProvider: AIProvider {
     public func stream(_ request: AIRequest) -> AsyncThrowingStream<String, Error> {
         HTTP.stream(session: session, request: {
             let messages: [[String: Any]] = request.messages.map { message in
-                var content: [[String: Any]] = message.captures.map { capture in
-                    let png = switch capture.content { case .image(let data): data }
-                    return ["type": "image", "source": [
-                        "type": "base64", "media_type": "image/png", "data": png.base64EncodedString(),
-                    ]]
+                var content: [[String: Any]] = message.captures.map { capture -> [String: Any] in
+                    switch capture.content {
+                    case .image(let png):
+                        ["type": "image", "source": [
+                            "type": "base64", "media_type": "image/png", "data": png.base64EncodedString(),
+                        ]]
+                    case .pdf(let name, let data):
+                        ["type": "document", "title": name, "source": [
+                            "type": "base64", "media_type": "application/pdf", "data": data.base64EncodedString(),
+                        ]]
+                    case .text(let name, let text):
+                        ["type": "text", "text": attachedText(name: name, text: text)]
+                    }
                 }
                 if !message.text.isEmpty { content.append(["type": "text", "text": message.text]) }
                 return ["role": message.role.rawValue, "content": content]

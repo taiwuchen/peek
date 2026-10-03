@@ -46,7 +46,7 @@ public struct CodexCLIProvider: AIProvider {
                         throw ProviderError.notAvailable(.cliNotInstalled)
                     }
                     try Task.checkCancellation()
-                    let directory = try CLIRequestDirectory(request: request)
+                    let directory = try CLIRequestDirectory(request: request, inlinesPDFs: true)
                     defer { directory.remove() }
                     var arguments = ["exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only",
                                      "--ephemeral", "--ignore-user-config", "-m", request.model]
