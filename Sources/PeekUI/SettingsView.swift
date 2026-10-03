@@ -38,6 +38,11 @@ struct SettingsView: View {
                         if provider.id.isAPI {
                             APIKeyEditor(model: model, providerID: provider.id)
                         }
+                        if provider.id == .claudeCLI, model.settings.provider == .claudeCLI {
+                            Toggle("Ignore CLAUDE.md and customizations", isOn: $model.settings.claudeIgnoresInstructions)
+                            Text("Skips CLAUDE.md, skills, plugins, hooks, MCP servers, and output styles.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                 }
                 Section("CLI paths") {
