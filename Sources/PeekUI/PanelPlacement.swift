@@ -25,6 +25,13 @@ func panelOrigin(anchor: CGRect?, panelSize: CGSize, visibleFrames: [CGRect],
                    y: max(frame.minY, min(proposed.y, frame.maxY - panelSize.height)))
 }
 
+/// Resizes `frame` to `height` keeping its top edge, then moves it up if it would drop below `visibleFrame`.
+func panelFrame(_ frame: CGRect, height: CGFloat, within visibleFrame: CGRect) -> CGRect {
+    var result = CGRect(x: frame.minX, y: frame.maxY - height, width: frame.width, height: height)
+    if result.minY < visibleFrame.minY { result.origin.y = min(visibleFrame.minY, visibleFrame.maxY - height) }
+    return result
+}
+
 private extension CGRect {
     var area: CGFloat { isNull ? 0 : width * height }
     func distanceSquared(to point: CGPoint) -> CGFloat {

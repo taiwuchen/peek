@@ -53,3 +53,21 @@ import Testing
                         visibleFrames: [CGRect(x: -900, y: 0, width: 900, height: 700)],
                         primaryScreenHeight: 900, mouseLocation: CGPoint(x: -500, y: 100)) == CGPoint(x: -900, y: 0))
 }
+
+@Test func growsPanelKeepingItsTopEdge() {
+    let frame = panelFrame(CGRect(x: 100, y: 400, width: 420, height: 160), height: 500,
+                           within: CGRect(x: 0, y: 25, width: 1440, height: 850))
+    #expect(frame == CGRect(x: 100, y: 60, width: 420, height: 500))
+}
+
+@Test func growsPanelUpWhenItWouldDropBelowScreen() {
+    let frame = panelFrame(CGRect(x: 100, y: 100, width: 420, height: 160), height: 500,
+                           within: CGRect(x: 0, y: 25, width: 1440, height: 850))
+    #expect(frame == CGRect(x: 100, y: 25, width: 420, height: 500))
+}
+
+@Test func alignsOversizedPanelToScreenTop() {
+    let frame = panelFrame(CGRect(x: 100, y: 100, width: 420, height: 160), height: 1000,
+                           within: CGRect(x: 0, y: 25, width: 1440, height: 850))
+    #expect(frame == CGRect(x: 100, y: -125, width: 420, height: 1000))
+}
