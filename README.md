@@ -67,7 +67,7 @@ swift build && swift test                                                # packa
 xcodegen generate && xcodebuild -scheme Peek -configuration Debug build  # app
 ```
 
-Requires Xcode 26 (ScreenCaptureKit needs its concurrency annotations) and [xcodegen](https://github.com/yonaskolb/XcodeGen). `Peek.xcodeproj` is generated from `project.yml` and is not committed. `scripts/build-app.sh` does both steps and prints the built app path.
+Requires Xcode 26 (ScreenCaptureKit needs its concurrency annotations) and [xcodegen](https://github.com/yonaskolb/XcodeGen). `Peek.xcodeproj` is generated from `project.yml` and is not committed. `scripts/build-app.sh` does both steps and prints the built app path. Debug builds are named Peek Dev with bundle ID `com.taiwu.peek.dev`, so they keep their own settings, API keys, and Screen Recording grant and can run beside an installed Peek.
 
 `project.yml` signs with an Apple Development certificate. macOS only honors a Screen Recording grant for a validly signed app, and ties the grant to the signing identity, so it survives rebuilds. Set `DEVELOPMENT_TEAM` to your own team. CI passes `CODE_SIGNING_ALLOWED=NO` to compile without a certificate; such a build cannot capture the screen. `scripts/build-release.sh` builds the signed Release app and DMG.
 

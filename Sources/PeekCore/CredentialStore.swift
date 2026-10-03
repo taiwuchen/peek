@@ -10,7 +10,7 @@ public protocol CredentialStore: Sendable {
 public struct KeychainCredentialStore: CredentialStore {
     private let service: String
 
-    public init(service: String = "com.taiwu.peek.api-keys") {
+    public init(service: String) {
         self.service = service
     }
 

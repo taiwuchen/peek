@@ -27,8 +27,8 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleName: Peek
-        CFBundleDisplayName: Peek
+        CFBundleName: $(PRODUCT_NAME)
+        CFBundleDisplayName: $(PRODUCT_NAME)
         CFBundleShortVersionString: "0.1.1"
         CFBundleVersion: "1"
         LSMinimumSystemVersion: "15.0"
@@ -54,3 +54,8 @@ targets:
         DEVELOPMENT_TEAM: JPH9MNBR57
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         GENERATE_INFOPLIST_FILE: false
+      configs:
+        # Debug is the QA build: its own name and bundle ID keep settings, keys, and grants apart from prod.
+        Debug:
+          PRODUCT_NAME: Peek Dev
+          PRODUCT_BUNDLE_IDENTIFIER: com.taiwu.peek.dev

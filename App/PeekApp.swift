@@ -18,7 +18,7 @@ final class PeekAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let settings = UserDefaultsSettingsStore()
-        let credentials = KeychainCredentialStore()
+        let credentials = KeychainCredentialStore(service: "\(Bundle.main.bundleIdentifier!).api-keys")
         let controller = AppController(
             regionCapturer: RegionCapturer(),
             providers: cliProviders(settings: settings) + apiProviders(credentials: credentials),
