@@ -141,6 +141,41 @@ struct APIProviderTests {
     }
 
     @Test(arguments: hostedIDs)
+    func pdfAndTextFilesUseEachProvidersFileFormat(id: ProviderID) async throws {
+        let stub = APIStub(body: fixture(id))
+        let session = stub.session()
+        defer { session.invalidateAndCancel(); stub.remove() }
+        let credentials = InMemoryCredentialStore()
+        try credentials.setAPIKey("test-key", for: id)
+        let provider = apiProvider(id, credentials: credentials, session: session)
+        let pdf = Data("%PDF-1.7".utf8)
+        let captures = [Capture(content: .pdf(name: "report.pdf", data: pdf), anchor: nil, sourceBundleID: nil),
+                        Capture(content: .text(name: "notes.txt", text: "Line one"), anchor: nil, sourceBundleID: nil)]
+        for try await _ in provider.stream(AIRequest(messages: [AIMessage(role: .user, text: "Explain this", captures: captures)], model: "test")) {}
+        let object = try requestObject(#require(stub.requests.first))
+        let key = id == .anthropicAPI ? "messages" : id == .openAIAPI ? "input" : "contents"
+        let messages = try #require(object[key] as? [[String: Any]])
+        let blocks = try #require(messages.first?[id == .geminiAPI ? "parts" : "content"] as? [[String: Any]])
+        try #require(blocks.count == 3)
+        let fileText = "<file name=\"notes.txt\">\nLine one\n</file>"
+        #expect(blocks[1]["text"] as? String == fileText)
+        switch id {
+        case .anthropicAPI:
+            #expect(blocks[0]["type"] as? String == "document")
+            #expect(blocks[0]["title"] as? String == "report.pdf")
+            #expect(blocks[0]["source"] as? [String: String] == ["type": "base64", "media_type": "application/pdf", "data": pdf.base64EncodedString()])
+            #expect(blocks[1]["type"] as? String == "text")
+        case .openAIAPI:
+            #expect(blocks[0] as? [String: String] == ["type": "input_file", "filename": "report.pdf",
+                                                       "file_data": "data:application/pdf;base64,\(pdf.base64EncodedString())"])
+            #expect(blocks[1]["type"] as? String == "input_text")
+        case .geminiAPI:
+            #expect(blocks[0]["inline_data"] as? [String: String] == ["mime_type": "application/pdf", "data": pdf.base64EncodedString()])
+        default: break
+        }
+    }
+
+    @Test(arguments: hostedIDs)
     func screenshotWithoutTextOmitsEmptyTextBlock(id: ProviderID) async throws {
         let stub = APIStub(body: fixture(id))
         let session = stub.session()

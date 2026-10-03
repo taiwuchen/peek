@@ -29,7 +29,7 @@ final class AnswerPanel: NSPanel, NSWindowDelegate {
         // A stretchable mask, not a layer cornerRadius: the mask shapes the window itself, so the
         // shadow follows the rounded outline instead of leaving grey wedges in the corner notches.
         effect.maskImage = PanelContentView.roundedMask(radius: PanelContentView.cornerRadius)
-        effect.onImages = { [weak self] in self?.session.addScreenshots($0) }
+        effect.onAttachments = { [weak self] in self?.session.addAttachments($0) }
         effect.onError = { [weak self] in self?.session.reportInputError($0) }
         let host = NSHostingView(rootView: ConversationView(session: session, openSettings: openSettings,
                                                            close: { [weak self] in self?.close() }))
@@ -79,13 +79,13 @@ final class AnswerPanel: NSPanel, NSWindowDelegate {
     }
 }
 
-/// The panel's rounded background, which doubles as a drop target so a screenshot can be dragged
+/// The panel's rounded background, which doubles as a drop target so a screenshot or file can be dragged
 /// anywhere onto the conversation rather than only onto the composer.
 @MainActor
 final class PanelContentView: NSVisualEffectView {
     static let cornerRadius: CGFloat = 14
 
-    var onImages: ([Data]) -> Void = { _ in }
+    var onAttachments: ([Capture.Content]) -> Void = { _ in }
     var onError: (String) -> Void = { _ in }
 
     private let dropHighlight = CALayer()
@@ -98,7 +98,7 @@ final class PanelContentView: NSVisualEffectView {
         dropHighlight.borderColor = NSColor.controlAccentColor.cgColor
         dropHighlight.isHidden = true
         layer?.addSublayer(dropHighlight)
-        registerForDraggedTypes(ScreenshotInput.dragTypes)
+        registerForDraggedTypes(AttachmentInput.dragTypes)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
@@ -114,7 +114,7 @@ final class PanelContentView: NSVisualEffectView {
     }
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        guard ScreenshotInput.containsImages(sender.draggingPasteboard) else { return [] }
+        guard AttachmentInput.containsAttachments(sender.draggingPasteboard) else { return [] }
         dropHighlight.isHidden = false
         return .copy
     }
@@ -129,14 +129,14 @@ final class PanelContentView: NSVisualEffectView {
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         dropHighlight.isHidden = true
-        return attachImages(from: sender.draggingPasteboard)
+        return attachFiles(from: sender.draggingPasteboard)
     }
 
-    /// Reads a drop into screenshots, reporting unreadable images rather than failing silently.
-    func attachImages(from pasteboard: NSPasteboard) -> Bool {
+    /// Reads a drop into attachments, reporting unreadable files rather than failing silently.
+    func attachFiles(from pasteboard: NSPasteboard) -> Bool {
         do {
-            guard let images = try ScreenshotInput.pngImages(from: pasteboard) else { return false }
-            onImages(images)
+            guard let contents = try AttachmentInput.attachments(from: pasteboard) else { return false }
+            onAttachments(contents)
         } catch {
             onError(error.localizedDescription)
         }

@@ -1,4 +1,5 @@
 import AppKit
+import PeekCore
 import Testing
 import UniformTypeIdentifiers
 @testable import PeekUI
@@ -44,7 +45,7 @@ struct ScreenshotDropTests {
         let input = ComposerTextView(frame: NSRect(x: 0, y: 0, width: 240, height: 40))
         input.string = "keep my draft"
         var images: [Data] = []
-        input.onImages = { images = $0 }
+        input.onAttachments = { images = $0.compactMap(\.imageData) }
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         pasteboard.setData(try composerImageData(), forType: .png)
@@ -62,7 +63,7 @@ struct ScreenshotDropTests {
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let input = ComposerTextView(frame: NSRect(x: 0, y: 0, width: 240, height: 40))
         var images: [Data] = []
-        input.onImages = { images = $0 }
+        input.onAttachments = { images = $0.compactMap(\.imageData) }
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         pasteboard.writeObjects([url as NSURL])
@@ -77,7 +78,7 @@ struct ScreenshotDropTests {
     @Test func draggedTextStillEditsTheDraft() throws {
         let input = ComposerTextView(frame: NSRect(x: 0, y: 0, width: 240, height: 40))
         var images: [Data] = []
-        input.onImages = { images = $0 }
+        input.onAttachments = { images = $0.compactMap(\.imageData) }
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         pasteboard.setString("dragged words", forType: .string)
@@ -86,23 +87,42 @@ struct ScreenshotDropTests {
         #expect(images.isEmpty)
     }
 
-    @Test func nonImageFileDragIsNotClaimedAsAScreenshot() throws {
+    @Test func draggedTextFileAttachesWithoutInsertingItsPath() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let url = directory.appendingPathComponent("notes.txt")
         try Data("plain notes".utf8).write(to: url)
+        let input = ComposerTextView(frame: NSRect(x: 0, y: 0, width: 240, height: 40))
+        var attached: [Capture.Content] = []
+        input.onAttachments = { attached = $0 }
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
         pasteboard.writeObjects([url as NSURL])
-        #expect(!ScreenshotInput.containsImages(pasteboard))
+        let drag = StubDrag(pasteboard)
+        #expect(input.draggingEntered(drag) == .copy)
+        #expect(input.performDragOperation(drag))
+        #expect(attached == [.text(name: "notes.txt", text: "plain notes")])
+        #expect(input.string.isEmpty)
+    }
+
+    @Test func unsupportedFileDragIsNotClaimed() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("archive.zip")
+        try Data([80, 75, 3, 4]).write(to: url)
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.writeObjects([url as NSURL])
+        #expect(!AttachmentInput.containsAttachments(pasteboard))
     }
 
     @Test func panelBackgroundAcceptsImagesDroppedAnywhere() throws {
         let content = PanelContentView(frame: NSRect(x: 0, y: 0, width: 420, height: 500))
         var images: [Data] = []
         var errors: [String] = []
-        content.onImages = { images = $0 }
+        content.onAttachments = { images = $0.compactMap(\.imageData) }
         content.onError = { errors.append($0) }
         #expect(content.registeredDraggedTypes.contains(.png))
         #expect(content.registeredDraggedTypes.contains(.fileURL))

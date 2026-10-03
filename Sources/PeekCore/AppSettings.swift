@@ -4,11 +4,23 @@ public struct PromptMode: Sendable, Equatable, Codable, Identifiable {
     public var id: UUID
     public var name: String
     public var prompt: String
+    /// Holds screenshots in the composer until the user adds context and sends.
+    public var waitsForContext: Bool
 
-    public init(id: UUID = UUID(), name: String, prompt: String) {
+    public init(id: UUID = UUID(), name: String, prompt: String, waitsForContext: Bool = false) {
         self.id = id
         self.name = name
         self.prompt = prompt
+        self.waitsForContext = waitsForContext
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        prompt = try container.decode(String.self, forKey: .prompt)
+        // Modes saved before this flag existed load with it off instead of resetting all settings.
+        waitsForContext = try container.decodeIfPresent(Bool.self, forKey: .waitsForContext) ?? false
     }
 }
 

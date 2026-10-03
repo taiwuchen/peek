@@ -35,11 +35,12 @@ import Testing
     let model = SettingsModel(providers: [], store: store, credentials: InMemoryCredentialStore())
     let original = try #require(model.settings.selectedMode)
 
-    #expect(model.addMode(name: " Translate ", prompt: " Translate into French.\nKeep formatting. "))
+    #expect(model.addMode(name: " Translate ", prompt: " Translate into French.\nKeep formatting. ", waitsForContext: true))
     let added = try #require(model.settings.selectedMode)
     #expect(added.id != original.id)
     #expect(added.name == "Translate")
     #expect(added.prompt == "Translate into French.\nKeep formatting.")
+    #expect(added.waitsForContext)
     #expect(store.load() == model.settings)
 
     let edited = PromptMode(id: added.id, name: "Translate to Spanish", prompt: "Translate into Spanish.")

@@ -7,6 +7,10 @@ final class AskSession {
     let providers: [any AIProvider]
     var question = ""
     private(set) var messages: [AIMessage] = []
+    /// Attachments waiting in the composer until the user sends.
+    private(set) var draft: [Capture] = []
+    /// Text the user typed alongside a mode prompt, keyed by user message id, for display.
+    private(set) var addedContext: [UUID: String] = [:]
     private(set) var responseNotes: [UUID: String] = [:]
     private(set) var message: String?
     private(set) var needsScreenRecordingPermission = false
@@ -28,8 +32,10 @@ final class AskSession {
 
     var isBusy: Bool { isCapturing || isStreaming }
     var canRetry: Bool { retryUserID != nil && !isBusy }
-    var canSend: Bool { !isBusy && !messages.isEmpty && !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    var latestCapture: Capture? { messages.last(where: { !$0.captures.isEmpty })?.captures.last }
+    var canSend: Bool {
+        !isBusy && (!draft.isEmpty || !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+    var latestCapture: Capture? { draft.last ?? messages.last(where: { !$0.captures.isEmpty })?.captures.last }
 
     init(regionCapturer: any ScreenRegionCapturer, providers: [any AIProvider], settingsStore: any SettingsStore) {
         self.regionCapturer = regionCapturer
@@ -63,7 +69,7 @@ final class AskSession {
 
     func beginCapture() {
         guard !isBusy else { return }
-        guard let prompt = screenshotPrompt() else { return }
+        guard let mode = activeMode() else { return }
         let token = UUID()
         generation = token
         isCapturing = true
@@ -73,7 +79,12 @@ final class AskSession {
                 let capture = try await regionCapturer.captureRegion()
                 guard generation == token, !Task.isCancelled else { return }
                 isCapturing = false
-                appendScreenshots([capture], prompt: prompt)
+                if mode.waitsForContext {
+                    task = nil
+                    addToDraft([capture])
+                    return
+                }
+                appendAttachments([capture], prompt: mode.prompt)
                 onPresent?()
                 await stream(token: token)
             } catch {
@@ -99,16 +110,33 @@ final class AskSession {
         }
     }
 
-    func addScreenshots(_ pngImages: [Data]) {
-        guard !pngImages.isEmpty else { return }
-        guard !isBusy else {
-            reportInputError("Stop the current response before adding a screenshot.")
+    /// Sends pasted or dropped attachments with the mode prompt, or holds them in the draft when the mode waits for context.
+    func addAttachments(_ contents: [Capture.Content]) {
+        guard !contents.isEmpty else { return }
+        guard let mode = activeMode() else { return }
+        let captures = contents.map { Capture(content: $0, anchor: nil, sourceBundleID: nil) }
+        if mode.waitsForContext {
+            addToDraft(captures)
             return
         }
-        guard let prompt = screenshotPrompt() else { return }
-        let captures = pngImages.map { Capture(content: .image($0), anchor: nil, sourceBundleID: nil) }
-        appendScreenshots(captures, prompt: prompt)
+        guard !isBusy else {
+            reportInputError("Stop the current response before adding a screenshot or file.")
+            return
+        }
+        appendAttachments(captures, prompt: mode.prompt)
         startResponse()
+        onPresent?()
+    }
+
+    func removeDraftAttachment(at index: Int) {
+        guard draft.indices.contains(index) else { return }
+        draft.remove(at: index)
+    }
+
+    private func addToDraft(_ captures: [Capture]) {
+        draft += captures
+        message = nil
+        needsScreenRecordingPermission = false
         onPresent?()
     }
 
@@ -117,7 +145,7 @@ final class AskSession {
         needsScreenRecordingPermission = false
     }
 
-    private func screenshotPrompt() -> String? {
+    private func activeMode() -> PromptMode? {
         refreshSettings()
         guard let mode = modes.first(where: { $0.id == selectedModeID }),
               !mode.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -126,10 +154,10 @@ final class AskSession {
             onPresent?()
             return nil
         }
-        return mode.prompt
+        return mode
     }
 
-    private func appendScreenshots(_ captures: [Capture], prompt: String) {
+    private func appendAttachments(_ captures: [Capture], prompt: String) {
         messages.append(AIMessage(role: .user, text: prompt, captures: captures))
         retryUserID = messages.last?.id
         responseID = nil
@@ -139,8 +167,17 @@ final class AskSession {
 
     func send() {
         guard canSend else { return }
-        refreshSettings()
-        messages.append(AIMessage(role: .user, text: question.trimmingCharacters(in: .whitespacesAndNewlines)))
+        let text = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        if draft.isEmpty {
+            refreshSettings()
+            messages.append(AIMessage(role: .user, text: text))
+        } else {
+            guard let mode = activeMode() else { return }
+            let message = AIMessage(role: .user, text: text.isEmpty ? mode.prompt : mode.prompt + "\n\n" + text, captures: draft)
+            messages.append(message)
+            if !text.isEmpty { addedContext[message.id] = text }
+            draft = []
+        }
         question = ""
         retryUserID = messages.last?.id
         responseID = nil

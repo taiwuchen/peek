@@ -44,9 +44,9 @@ public struct ClaudeCLIProvider: AIProvider {
                                      "--model", request.model, "--system-prompt", AIRequest.systemPrompt,
                                      "--safe-mode", "--no-session-persistence"]
                     var prompt = directory.transcript
-                    if !directory.images.isEmpty {
+                    if !directory.images.isEmpty || !directory.pdfs.isEmpty {
                         arguments += ["--tools", "Read", "--allowedTools", "Read"]
-                        prompt = "View the screenshot files listed in the conversation before answering.\n\n" + prompt
+                        prompt = "View the screenshot and PDF files listed in the conversation before answering.\n\n" + prompt
                     } else {
                         arguments += ["--tools", ""]
                     }

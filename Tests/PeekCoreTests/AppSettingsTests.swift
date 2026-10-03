@@ -63,3 +63,12 @@ import Testing
     try store.setAPIKey(nil, for: .geminiAPI)
     #expect(store.apiKey(for: .geminiAPI) == nil)
 }
+
+@Test func modesSavedWithoutContextFlagLoadWithItOff() throws {
+    let id = UUID()
+    let json = #"{"id":"\#(id.uuidString)","name":"Explain","prompt":"Explain this"}"#
+    let mode = try JSONDecoder().decode(PromptMode.self, from: Data(json.utf8))
+    #expect(mode == PromptMode(id: id, name: "Explain", prompt: "Explain this"))
+    let waiting = PromptMode(name: "Review", prompt: "Review this", waitsForContext: true)
+    #expect(try JSONDecoder().decode(PromptMode.self, from: JSONEncoder().encode(waiting)) == waiting)
+}

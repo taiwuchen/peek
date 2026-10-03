@@ -24,9 +24,10 @@ final class SettingsModel {
     }
 
     @discardableResult
-    func addMode(name: String, prompt: String) -> Bool {
+    func addMode(name: String, prompt: String, waitsForContext: Bool = false) -> Bool {
         let mode = PromptMode(name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                              prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines))
+                              prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
+                              waitsForContext: waitsForContext)
         guard isUsable(mode) else { return false }
         var updated = settings
         updated.modes.append(mode)
@@ -39,7 +40,8 @@ final class SettingsModel {
     func updateMode(_ mode: PromptMode) -> Bool {
         guard let index = settings.modes.firstIndex(where: { $0.id == mode.id }) else { return false }
         let updated = PromptMode(id: mode.id, name: mode.name.trimmingCharacters(in: .whitespacesAndNewlines),
-                                 prompt: mode.prompt.trimmingCharacters(in: .whitespacesAndNewlines))
+                                 prompt: mode.prompt.trimmingCharacters(in: .whitespacesAndNewlines),
+                                 waitsForContext: mode.waitsForContext)
         guard isUsable(updated) else { return false }
         settings.modes[index] = updated
         return true

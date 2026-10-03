@@ -1,3 +1,4 @@
+import CoreText
 import Foundation
 import PeekCore
 import Testing
@@ -120,8 +121,58 @@ struct CLIProviderTests {
             #expect(arguments.contains("--no-session-persistence"))
             #expect(arguments.contains("--safe-mode"))
             #expect(arguments.contains("Read"))
-            #expect(prompt.contains("View the screenshot files"))
+            #expect(prompt.contains("View the screenshot and PDF files"))
         }
+    }
+
+    @Test(arguments: [ProviderID.claudeCLI, .codexCLI]) func pdfAndTextFilesReachTheCLI(id: ProviderID) async throws {
+        let fake = try FakeCLI(script: """
+        record="$(dirname "$0")"
+        printf '%s\\n' "$@" > "$record/args"
+        cat > "$record/prompt"
+        for pdf in *.pdf; do [ -f "$pdf" ] && cat "$pdf" > "$record/$pdf"; done
+        exit 0
+        """)
+        defer { fake.remove() }
+        let settings = CLISettings()
+        settings.save(AppSettings(claudePath: fake.executable, codexPath: fake.executable))
+        let provider = try #require(cliProviders(settings: settings).first { $0.id == id })
+        let pdf = pdfData(text: "Quarterly total 42")
+        let captures = [Capture(content: .pdf(name: "report.pdf", data: pdf), anchor: nil, sourceBundleID: nil),
+                        Capture(content: .text(name: "notes.txt", text: "Line one"), anchor: nil, sourceBundleID: nil)]
+        let request = AIRequest(messages: [AIMessage(role: .user, text: "Explain this", captures: captures)], model: "test")
+        for try await _ in provider.stream(request) {}
+        let prompt = try record("prompt", from: fake)
+        let json = try #require(prompt.components(separatedBy: "Conversation JSON:\n").last)
+        let messages = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]])
+        let files = try #require(messages.first?["files"] as? [[String: String]])
+        try #require(files.count == 2)
+        #expect(files[0]["name"] == "report.pdf")
+        #expect(files[1] == ["name": "notes.txt", "text": "Line one"])
+        let arguments = try record("args", from: fake).components(separatedBy: "\n")
+        if id == .claudeCLI {
+            #expect(try Data(contentsOf: fake.directory.appendingPathComponent("turn-1-file-1.pdf")) == pdf)
+            #expect(files[0]["path"]?.hasSuffix("turn-1-file-1.pdf") == true)
+            #expect(arguments.contains("Read"))
+        } else {
+            #expect(files[0]["text"]?.contains("Quarterly total 42") == true)
+            #expect(files[0]["path"] == nil)
+            #expect(!arguments.contains("-i"))
+        }
+    }
+
+    private func pdfData(text: String) -> Data {
+        let data = NSMutableData()
+        var box = CGRect(x: 0, y: 0, width: 300, height: 100)
+        let context = CGContext(consumer: CGDataConsumer(data: data)!, mediaBox: &box, nil)!
+        context.beginPDFPage(nil)
+        let font = CTFontCreateWithName("Helvetica" as CFString, 12, nil)
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [.font: font]))
+        context.textPosition = CGPoint(x: 10, y: 50)
+        CTLineDraw(line, context)
+        context.endPDFPage()
+        context.closePDF()
+        return data as Data
     }
 
     private func record(_ name: String, from fake: FakeCLI) throws -> String {
