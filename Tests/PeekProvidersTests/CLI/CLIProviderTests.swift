@@ -125,6 +125,19 @@ struct CLIProviderTests {
         }
     }
 
+    @Test func claudeOmitsSafeModeWhenToggleIsOff() async throws {
+        let fake = try FakeCLI(script: """
+        printf '%s\\n' "$@" > "$(dirname "$0")/args"
+        cat > /dev/null
+        """)
+        defer { fake.remove() }
+        let settings = CLISettings()
+        settings.save(AppSettings(claudePath: fake.executable, claudeIgnoresInstructions: false))
+        let request = AIRequest(messages: [AIMessage(role: .user, text: "Explain")], model: "test")
+        for try await _ in ClaudeCLIProvider(settings: settings).stream(request) {}
+        #expect(!(try record("args", from: fake).components(separatedBy: "\n").contains("--safe-mode")))
+    }
+
     @Test(arguments: [ProviderID.claudeCLI, .codexCLI]) func pdfAndTextFilesReachTheCLI(id: ProviderID) async throws {
         let fake = try FakeCLI(script: """
         record="$(dirname "$0")"
