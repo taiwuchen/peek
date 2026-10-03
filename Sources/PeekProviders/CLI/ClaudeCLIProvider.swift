@@ -34,7 +34,8 @@ public struct ClaudeCLIProvider: AIProvider {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    guard let path = await CLILocator().locate("claude", override: settings.load().claudePath) else {
+                    let appSettings = settings.load()
+                    guard let path = await CLILocator().locate("claude", override: appSettings.claudePath) else {
                         throw ProviderError.notAvailable(.cliNotInstalled)
                     }
                     try Task.checkCancellation()
@@ -42,7 +43,8 @@ public struct ClaudeCLIProvider: AIProvider {
                     defer { directory.remove() }
                     var arguments = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                                      "--model", request.model, "--system-prompt", AIRequest.systemPrompt,
-                                     "--safe-mode", "--no-session-persistence"]
+                                     "--no-session-persistence"]
+                    if appSettings.claudeIgnoresInstructions { arguments.append("--safe-mode") }
                     var prompt = directory.transcript
                     if !directory.images.isEmpty {
                         arguments += ["--tools", "Read", "--allowedTools", "Read"]

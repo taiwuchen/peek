@@ -23,8 +23,10 @@ public struct AppSettings: Sendable, Equatable, Codable {
     public var claudePath: String?
     /// Path override for the `codex` binary; nil means search PATH and common install locations.
     public var codexPath: String?
+    /// Run Claude Code without CLAUDE.md and other user customizations.
+    public var claudeIgnoresInstructions: Bool
 
-    public init(provider: ProviderID = .anthropicAPI, model: String = "claude-opus-5", modes: [PromptMode]? = nil, selectedModeID: UUID? = nil, claudePath: String? = nil, codexPath: String? = nil) {
+    public init(provider: ProviderID = .anthropicAPI, model: String = "claude-opus-5", modes: [PromptMode]? = nil, selectedModeID: UUID? = nil, claudePath: String? = nil, codexPath: String? = nil, claudeIgnoresInstructions: Bool = true) {
         self.provider = provider
         self.model = model
         if let modes {
@@ -38,6 +40,7 @@ public struct AppSettings: Sendable, Equatable, Codable {
         }
         self.claudePath = claudePath
         self.codexPath = codexPath
+        self.claudeIgnoresInstructions = claudeIgnoresInstructions
     }
 }
 
