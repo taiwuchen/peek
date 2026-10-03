@@ -9,6 +9,8 @@ final class AskSession {
     private(set) var messages: [AIMessage] = []
     /// Attachments waiting in the composer until the user sends.
     private(set) var draft: [Capture] = []
+    /// Mode whose prompt the draft is sent with, fixed when the draft starts.
+    private var draftMode: PromptMode?
     /// Text the user typed alongside a mode prompt, keyed by user message id, for display.
     private(set) var addedContext: [UUID: String] = [:]
     private(set) var responseNotes: [UUID: String] = [:]
@@ -64,6 +66,7 @@ final class AskSession {
         settings.selectedModeID = id
         settingsStore.save(settings)
         refreshSettings()
+        if draftMode != nil { draftMode = modes.first { $0.id == id } }
         onSettingsChange?()
     }
 
@@ -81,7 +84,7 @@ final class AskSession {
                 isCapturing = false
                 if mode.waitsForContext {
                     task = nil
-                    addToDraft([capture])
+                    addToDraft([capture], mode: mode)
                     return
                 }
                 appendAttachments([capture], prompt: mode.prompt)
@@ -110,13 +113,17 @@ final class AskSession {
         }
     }
 
-    /// Sends pasted or dropped attachments with the mode prompt, or holds them in the draft when the mode waits for context.
+    /// Sends pasted or dropped attachments with the mode prompt, or holds them in the draft when one is pending or the mode waits for context.
     func addAttachments(_ contents: [Capture.Content]) {
         guard !contents.isEmpty else { return }
-        guard let mode = activeMode() else { return }
         let captures = contents.map { Capture(content: $0, anchor: nil, sourceBundleID: nil) }
+        if let draftMode {
+            addToDraft(captures, mode: draftMode)
+            return
+        }
+        guard let mode = activeMode() else { return }
         if mode.waitsForContext {
-            addToDraft(captures)
+            addToDraft(captures, mode: mode)
             return
         }
         guard !isBusy else {
@@ -131,9 +138,11 @@ final class AskSession {
     func removeDraftAttachment(at index: Int) {
         guard draft.indices.contains(index) else { return }
         draft.remove(at: index)
+        if draft.isEmpty { draftMode = nil }
     }
 
-    private func addToDraft(_ captures: [Capture]) {
+    private func addToDraft(_ captures: [Capture], mode: PromptMode) {
+        draftMode = draftMode ?? mode
         draft += captures
         message = nil
         needsScreenRecordingPermission = false
@@ -168,15 +177,15 @@ final class AskSession {
     func send() {
         guard canSend else { return }
         let text = question.trimmingCharacters(in: .whitespacesAndNewlines)
-        if draft.isEmpty {
-            refreshSettings()
-            messages.append(AIMessage(role: .user, text: text))
-        } else {
-            guard let mode = activeMode() else { return }
+        refreshSettings()
+        if let mode = draftMode {
             let message = AIMessage(role: .user, text: text.isEmpty ? mode.prompt : mode.prompt + "\n\n" + text, captures: draft)
             messages.append(message)
             if !text.isEmpty { addedContext[message.id] = text }
             draft = []
+            draftMode = nil
+        } else {
+            messages.append(AIMessage(role: .user, text: text))
         }
         question = ""
         retryUserID = messages.last?.id

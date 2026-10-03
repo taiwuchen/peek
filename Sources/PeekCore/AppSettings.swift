@@ -13,15 +13,6 @@ public struct PromptMode: Sendable, Equatable, Codable, Identifiable {
         self.prompt = prompt
         self.waitsForContext = waitsForContext
     }
-
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(UUID.self, forKey: .id)
-        name = try container.decode(String.self, forKey: .name)
-        prompt = try container.decode(String.self, forKey: .prompt)
-        // Modes saved before this flag existed load with it off instead of resetting all settings.
-        waitsForContext = try container.decodeIfPresent(Bool.self, forKey: .waitsForContext) ?? false
-    }
 }
 
 /// User preferences persisted in UserDefaults. Secrets live in CredentialStore, never here.

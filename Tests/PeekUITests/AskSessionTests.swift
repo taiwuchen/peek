@@ -463,3 +463,28 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     #expect(sent[1].messages.last?.captures.map(\.content) == [.image(Data([5]))])
     #expect(session.addedContext.isEmpty)
 }
+
+@Test @MainActor func pendingDraftKeepsItsModeWhenAnotherConversationChangesSelection() async throws {
+    let requests = Mutex<[AIRequest]>([])
+    let review = PromptMode(name: "Review", prompt: "Review this", waitsForContext: true)
+    let translate = PromptMode(name: "Translate", prompt: "Translate this")
+    let store = UserDefaultsSettingsStore(defaults: UserDefaults(suiteName: "PeekUITests.\(UUID())")!)
+    store.save(AppSettings(modes: [review, translate], selectedModeID: review.id))
+    let session = AskSession(regionCapturer: Region(), providers: [TestProvider(respond: { request in
+        requests.withLock { $0.append(request) }
+        return AsyncThrowingStream { $0.yield("Answer"); $0.finish() }
+    })], settingsStore: store)
+    session.beginCapture()
+    try await waitUntil { !session.isBusy }
+    var settings = store.load()
+    settings.selectedModeID = translate.id
+    store.save(settings)
+    session.addAttachments([.image(Data([6]))])
+    #expect(session.draft.count == 2)
+    #expect(requests.withLock { $0.isEmpty })
+    session.send()
+    try await waitUntil { !session.isBusy }
+    let sent = try #require(requests.withLock { $0.first })
+    #expect(sent.messages.last?.text == "Review this")
+    #expect(sent.messages.last?.captures.count == 2)
+}
