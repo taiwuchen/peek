@@ -8,6 +8,9 @@ options:
 packages:
   PeekKit:
     path: .
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.10.0"
 targets:
   Peek:
     type: application
@@ -24,17 +27,21 @@ targets:
         product: PeekProviders
       - package: PeekKit
         product: PeekUI
+      - package: Sparkle
     info:
       path: App/Info.plist
       properties:
         CFBundleName: $(PRODUCT_NAME)
         CFBundleDisplayName: $(PRODUCT_NAME)
-        CFBundleShortVersionString: "0.1.1"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSMinimumSystemVersion: "15.0"
         LSUIElement: true
         NSPrincipalClass: NSApplication
         NSHumanReadableCopyright: "Copyright (c) 2026 Taiwu Chen. MIT licensed."
+        SUFeedURL: $(SPARKLE_FEED_URL)
+        SUPublicEDKey: $(SPARKLE_PUBLIC_KEY)
+        SUEnableAutomaticChecks: true
     entitlements:
       path: App/Peek.entitlements
       properties:
@@ -54,8 +61,12 @@ targets:
         DEVELOPMENT_TEAM: JPH9MNBR57
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         GENERATE_INFOPLIST_FILE: false
+        # Prod checks this feed for updates; the appcast is uploaded with each GitHub release.
+        SPARKLE_FEED_URL: https://github.com/taiwuchen/peek/releases/latest/download/appcast.xml
+        SPARKLE_PUBLIC_KEY: uLFLQiNhHzEnhHXJ9gTdgJu0BWq2qR4mc3mi6glS/KQ=
       configs:
         # Debug is the QA build: its own name and bundle ID keep settings, keys, and grants apart from prod.
         Debug:
           PRODUCT_NAME: Peek Dev
           PRODUCT_BUNDLE_IDENTIFIER: com.taiwu.peek.dev
+          SPARKLE_FEED_URL: ""

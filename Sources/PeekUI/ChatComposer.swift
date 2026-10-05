@@ -59,10 +59,15 @@ struct ChatComposer: NSViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
         guard let width = proposal.width, width.isFinite, width > 0,
-              let input = nsView.documentView as? ComposerTextView,
-              let container = input.textContainer, let layout = input.layoutManager else { return nil }
-        input.setFrameSize(NSSize(width: width, height: max(34, input.frame.height)))
-        container.containerSize.width = max(1, width - input.textContainerInset.width * 2)
+              let input = nsView.documentView as? ComposerTextView, let font = input.font else { return nil }
+        // Measure in a scratch layout; resizing the live text view here would leave it at a probe width.
+        let container = NSTextContainer(size: NSSize(width: max(1, width - input.textContainerInset.width * 2),
+                                                     height: CGFloat.greatestFiniteMagnitude))
+        container.lineFragmentPadding = input.textContainer?.lineFragmentPadding ?? 0
+        let layout = NSLayoutManager()
+        layout.addTextContainer(container)
+        let storage = NSTextStorage(string: input.string, attributes: [.font: font])
+        storage.addLayoutManager(layout)
         layout.ensureLayout(for: container)
         let textHeight = max(layout.usedRect(for: container).maxY, layout.extraLineFragmentRect.maxY)
         let height = textHeight + input.textContainerInset.height * 2

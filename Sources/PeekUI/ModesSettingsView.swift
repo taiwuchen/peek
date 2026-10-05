@@ -4,11 +4,10 @@ import SwiftUI
 
 struct ModesSettingsView: View {
     @Bindable var model: SettingsModel
-    @State private var editedMode: PromptMode?
     @State private var isCreating = false
 
     var body: some View {
-        Section("Prompt modes") {
+        Section {
             Picker("Active mode", selection: $model.settings.selectedModeID) {
                 if model.settings.selectedMode == nil {
                     Text("Choose a mode").tag(model.settings.selectedModeID)
@@ -18,28 +17,20 @@ struct ModesSettingsView: View {
                 }
             }
             if let mode = model.settings.selectedMode {
-                Text(mode.prompt).lineLimit(4).foregroundStyle(.secondary)
+                ModeFields(mode: mode) { model.updateMode($0) }
+                    .id(mode.id)
                 KeyboardShortcuts.Recorder("Shortcut:", name: mode.shortcutName)
-                HStack {
-                    Button("Edit mode") { editedMode = mode }
-                    Button("Delete mode", role: .destructive) { model.deleteMode(id: mode.id) }
-                        .disabled(!model.canDeleteMode(id: mode.id))
-                }
-                if !model.canDeleteMode(id: mode.id) {
-                    Text("Keep at least one mode with a name and prompt. Create another before deleting this one.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                Button("Delete mode", role: .destructive) { model.deleteMode(id: mode.id) }
+                    .disabled(!model.canDeleteMode(id: mode.id))
             } else {
                 Text("Create or select a mode before asking about a screen region.")
                     .foregroundStyle(.secondary)
             }
-            Button("New mode") { isCreating = true }
-            Text("The active mode supplies the prompt for each new screen capture. A mode's shortcut selects it and starts a capture.")
-                .font(.caption).foregroundStyle(.secondary)
-        }
-        .sheet(item: $editedMode) { mode in
-            ModeEditor(mode: mode) { name, prompt, waitsForContext in
-                model.updateMode(PromptMode(id: mode.id, name: name, prompt: prompt, waitsForContext: waitsForContext))
+        } header: {
+            HStack {
+                Text("Prompt modes")
+                Spacer()
+                Button("New mode") { isCreating = true }
             }
         }
         .sheet(isPresented: $isCreating) {
@@ -50,25 +41,47 @@ struct ModesSettingsView: View {
     }
 }
 
-private struct ModeEditor: View {
-    @Environment(\.dismiss) private var dismiss
+/// Edits the selected mode in place; saves on every change while the name and prompt are filled in.
+private struct ModeFields: View {
     @State private var name: String
     @State private var prompt: String
     @State private var waitsForContext: Bool
-    private let isNew: Bool
-    private let save: (String, String, Bool) -> Bool
+    private let id: UUID
+    private let save: (PromptMode) -> Void
 
-    init(mode: PromptMode? = nil, save: @escaping (String, String, Bool) -> Bool) {
-        _name = State(initialValue: mode?.name ?? "")
-        _prompt = State(initialValue: mode?.prompt ?? "")
-        _waitsForContext = State(initialValue: mode?.waitsForContext ?? false)
-        isNew = mode == nil
+    init(mode: PromptMode, save: @escaping (PromptMode) -> Void) {
+        _name = State(initialValue: mode.name)
+        _prompt = State(initialValue: mode.prompt)
+        _waitsForContext = State(initialValue: mode.waitsForContext)
+        id = mode.id
         self.save = save
     }
 
     var body: some View {
+        TextField("Name", text: $name)
+            .onChange(of: name) { saveFields() }
+        TextField("Prompt", text: $prompt, axis: .vertical)
+            .lineLimit(3...10)
+            .onChange(of: prompt) { saveFields() }
+        Toggle("Add context before sending", isOn: $waitsForContext)
+            .onChange(of: waitsForContext) { saveFields() }
+    }
+
+    private func saveFields() {
+        save(PromptMode(id: id, name: name, prompt: prompt, waitsForContext: waitsForContext))
+    }
+}
+
+private struct ModeEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var prompt = ""
+    @State private var waitsForContext = false
+    let save: (String, String, Bool) -> Bool
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(isNew ? "New mode" : "Edit mode").font(.headline)
+            Text("New mode").font(.headline)
             TextField("Name", text: $name)
             Text("Prompt")
             TextEditor(text: $prompt)
@@ -77,10 +90,6 @@ private struct ModeEditor: View {
                 .border(.separator)
                 .accessibilityLabel("Prompt")
             Toggle("Add context before sending", isOn: $waitsForContext)
-            Text("When on, a screenshot waits in the composer so you can add text, images, or files, then press Enter to send.")
-                .font(.caption).foregroundStyle(.secondary)
-            Text("A name and prompt are required. Changes take effect when you save.")
-                .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)

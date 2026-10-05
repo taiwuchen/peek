@@ -6,11 +6,18 @@ import SwiftUI
 final class AnswerPanel: NSPanel, NSWindowDelegate {
     let session: AskSession
     var onClose: (() -> Void)?
+    static let expandDuration: TimeInterval = 0.3
+    private static let fullSize = NSSize(width: 420, height: 500)
+    private static let fullMinSize = NSSize(width: 360, height: 320)
     private var hasPosition = false
+    /// Compact until the first message is sent; the height then follows the content.
+    private var isCompact = true
+    /// Placed above the cursor, so height changes keep the bottom edge.
+    private var growsUp = false
 
     init(session: AskSession, openSettings: @escaping () -> Void) {
         self.session = session
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 420, height: 500),
+        super.init(contentRect: NSRect(x: 0, y: 0, width: Self.fullSize.width, height: 160),
                    styleMask: [.resizable, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: false)
         title = "Peek"
         level = .floating
@@ -20,7 +27,6 @@ final class AnswerPanel: NSPanel, NSWindowDelegate {
         isOpaque = false
         backgroundColor = .clear
         hasShadow = true
-        minSize = NSSize(width: 360, height: 320)
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         let effect = PanelContentView()
         effect.material = .hudWindow
@@ -32,7 +38,9 @@ final class AnswerPanel: NSPanel, NSWindowDelegate {
         effect.onAttachments = { [weak self] in self?.session.addAttachments($0) }
         effect.onError = { [weak self] in self?.session.reportInputError($0) }
         let host = NSHostingView(rootView: ConversationView(session: session, openSettings: openSettings,
-                                                           close: { [weak self] in self?.close() }))
+                                                           close: { [weak self] in self?.close() },
+                                                           fitCompact: { [weak self] in self?.fitCompact(height: $0) },
+                                                           expand: { [weak self] in self?.expand() }))
         host.translatesAutoresizingMaskIntoConstraints = false
         effect.addSubview(host)
         NSLayoutConstraint.activate([
@@ -51,14 +59,47 @@ final class AnswerPanel: NSPanel, NSWindowDelegate {
     override var canBecomeMain: Bool { false }
 
     func present(anchor: CGRect?) {
+        // A mode that sends right away has a message before the panel first appears.
+        if !session.messages.isEmpty { expand() }
+        contentView?.layoutSubtreeIfNeeded()
         if !hasPosition {
-            setFrameOrigin(panelOrigin(anchor: anchor, panelSize: frame.size,
-                                       visibleFrames: NSScreen.screens.map(\.visibleFrame),
-                                       primaryScreenHeight: NSScreen.screens.first?.frame.height ?? 0,
-                                       mouseLocation: NSEvent.mouseLocation))
+            // Place for the full height so expanding stays on screen and off the capture.
+            let size = NSSize(width: frame.width, height: max(frame.height, Self.fullSize.height))
+            let mouse = NSEvent.mouseLocation
+            let origin = panelOrigin(anchor: anchor, panelSize: size,
+                                     visibleFrames: NSScreen.screens.map(\.visibleFrame),
+                                     primaryScreenHeight: NSScreen.screens.first?.frame.height ?? 0,
+                                     mouseLocation: mouse)
+            growsUp = origin.y > mouse.y
+            setFrameOrigin(NSPoint(x: origin.x, y: growsUp ? origin.y : origin.y + size.height - frame.height))
             hasPosition = true
         }
         makeKeyAndOrderFront(nil)
+    }
+
+    private var visibleFrame: CGRect { (screen ?? NSScreen.main)?.visibleFrame ?? frame }
+
+    private func fitCompact(height: CGFloat) {
+        guard isCompact, height > 0 else { return }
+        minSize = NSSize(width: Self.fullMinSize.width, height: height)
+        maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: height)
+        guard abs(frame.height - height) >= 0.5 else { return }
+        setFrame(panelFrame(frame, height: height, growsUp: growsUp, within: visibleFrame), display: true)
+    }
+
+    /// Grows to full height away from the cursor, animating only when the panel is already on screen.
+    private func expand() {
+        guard isCompact else { return }
+        isCompact = false
+        minSize = Self.fullMinSize
+        maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        let target = panelFrame(frame, height: Self.fullSize.height, growsUp: growsUp, within: visibleFrame)
+        guard isVisible else { return setFrame(target, display: true) }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Self.expandDuration
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            animator().setFrame(target, display: true)
+        }
     }
 
     override func close() {

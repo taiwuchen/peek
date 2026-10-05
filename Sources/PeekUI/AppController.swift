@@ -9,6 +9,8 @@ public final class AppController: NSObject, NSMenuDelegate {
     private let providers: [any AIProvider]
     private let settingsStore: any SettingsStore
     private let settingsModel: SettingsModel
+    /// Prod only; Peek Dev has no update feed.
+    private let checkForUpdates: (() -> Void)?
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     /// Shortcut names with a registered handler, keyed by mode id.
@@ -17,8 +19,10 @@ public final class AppController: NSObject, NSMenuDelegate {
     private(set) var conversations: [AnswerPanel] = []
 
     public init(regionCapturer: any ScreenRegionCapturer,
-                providers: [any AIProvider], settingsStore: any SettingsStore, credentials: any CredentialStore) {
+                providers: [any AIProvider], settingsStore: any SettingsStore, credentials: any CredentialStore,
+                checkForUpdates: (() -> Void)? = nil) {
         self.regionCapturer = regionCapturer
+        self.checkForUpdates = checkForUpdates
         self.providers = providers
         self.settingsStore = settingsStore
         settingsModel = SettingsModel(providers: providers, store: settingsStore, credentials: credentials)
@@ -35,6 +39,10 @@ public final class AppController: NSObject, NSMenuDelegate {
         region.target = self
         region.setShortcut(for: .askRegion)
         menu.addItem(.separator())
+        if checkForUpdates != nil {
+            let updates = menu.addItem(withTitle: "Check for Updates...", action: #selector(checkUpdates), keyEquivalent: "")
+            updates.target = self
+        }
         let settings = menu.addItem(withTitle: "Settings...", action: #selector(showSettings), keyEquivalent: ",")
         settings.target = self
         let quit = menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -92,6 +100,8 @@ public final class AppController: NSObject, NSMenuDelegate {
         conversations.append(panel)
         session.beginCapture()
     }
+
+    @objc private func checkUpdates() { checkForUpdates?() }
 
     @objc private func showSettings() {
         if settingsWindow == nil {
