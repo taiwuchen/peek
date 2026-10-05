@@ -54,7 +54,7 @@ private func composerScrollView(in view: NSView) -> NSScrollView? {
     #expect(abs(input.frame.width - scrollView.contentSize.width) < 1)
 }
 
-@Test @MainActor func panelStaysCompactUntilSentThenExpandsFromItsTop() async throws {
+@Test @MainActor func panelStaysCompactUntilSentThenExpandsInPlace() async throws {
     let panel = try await waitingPanel()
     defer { panel.close() }
     let compact = panel.frame
@@ -64,6 +64,6 @@ private func composerScrollView(in view: NSView) -> NSScrollView? {
     let deadline = ContinuousClock.now + .seconds(3)
     while panel.frame.height < 500 && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
     #expect(panel.frame.height == 500)
-    let visibleMinY = panel.screen?.visibleFrame.minY ?? 0
-    #expect(panel.frame.maxY == compact.maxY || panel.frame.minY == visibleMinY)
+    // Placement reserves the full height, so the panel keeps the edge nearest the cursor.
+    #expect(panel.frame.maxY == compact.maxY || panel.frame.minY == compact.minY)
 }

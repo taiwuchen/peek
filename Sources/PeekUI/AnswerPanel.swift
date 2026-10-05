@@ -12,6 +12,8 @@ final class AnswerPanel: NSPanel, NSWindowDelegate {
     private var hasPosition = false
     /// Compact until the first message is sent; the height then follows the content.
     private var isCompact = true
+    /// Placed above the cursor, so height changes keep the bottom edge.
+    private var growsUp = false
 
     init(session: AskSession, openSettings: @escaping () -> Void) {
         self.session = session
@@ -61,10 +63,15 @@ final class AnswerPanel: NSPanel, NSWindowDelegate {
         if !session.messages.isEmpty { expand() }
         contentView?.layoutSubtreeIfNeeded()
         if !hasPosition {
-            setFrameOrigin(panelOrigin(anchor: anchor, panelSize: frame.size,
-                                       visibleFrames: NSScreen.screens.map(\.visibleFrame),
-                                       primaryScreenHeight: NSScreen.screens.first?.frame.height ?? 0,
-                                       mouseLocation: NSEvent.mouseLocation))
+            // Place for the full height so expanding stays on screen and off the capture.
+            let size = NSSize(width: frame.width, height: max(frame.height, Self.fullSize.height))
+            let mouse = NSEvent.mouseLocation
+            let origin = panelOrigin(anchor: anchor, panelSize: size,
+                                     visibleFrames: NSScreen.screens.map(\.visibleFrame),
+                                     primaryScreenHeight: NSScreen.screens.first?.frame.height ?? 0,
+                                     mouseLocation: mouse)
+            growsUp = origin.y > mouse.y
+            setFrameOrigin(NSPoint(x: origin.x, y: growsUp ? origin.y : origin.y + size.height - frame.height))
             hasPosition = true
         }
         makeKeyAndOrderFront(nil)
@@ -77,16 +84,16 @@ final class AnswerPanel: NSPanel, NSWindowDelegate {
         minSize = NSSize(width: Self.fullMinSize.width, height: height)
         maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: height)
         guard abs(frame.height - height) >= 0.5 else { return }
-        setFrame(panelFrame(frame, height: height, within: visibleFrame), display: true)
+        setFrame(panelFrame(frame, height: height, growsUp: growsUp, within: visibleFrame), display: true)
     }
 
-    /// Grows to full height, animating only when the panel is already on screen.
+    /// Grows to full height away from the cursor, animating only when the panel is already on screen.
     private func expand() {
         guard isCompact else { return }
         isCompact = false
         minSize = Self.fullMinSize
         maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        let target = panelFrame(frame, height: Self.fullSize.height, within: visibleFrame)
+        let target = panelFrame(frame, height: Self.fullSize.height, growsUp: growsUp, within: visibleFrame)
         guard isVisible else { return setFrame(target, display: true) }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = Self.expandDuration
