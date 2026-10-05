@@ -3,6 +3,27 @@
 Notable changes to Peek. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and Peek aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-10-05
+
+Install this version by hand. From here on, Peek updates itself.
+
+### Added
+
+- In-app updates via Sparkle. Peek checks for a new release daily and asks before installing; the menu bar menu adds **Check for Updates...**.
+- Per-mode **Add context before sending**: the screenshot waits in the composer so you can add text, images, PDFs, or text files, then press Enter to send them together.
+- A Settings toggle to load your `CLAUDE.md` for the Claude Code provider. Off by default, so your customizations do not shape answers.
+
+### Changed
+
+- A capture waiting for context opens a compact panel with just the composer. It grows to full size when you send the first message.
+- The panel opens at the cursor where your drag ends, and never covers the capture, even after a reverse drag.
+- Modes are edited directly on the General tab of Settings and save as you type. **New mode** sits in the Prompt modes header.
+- Settings saved by 0.1.1 reset to defaults once: re-select your provider and recreate custom modes.
+
+### Fixed
+
+- Text in the composer no longer wraps after a few words while a screenshot is waiting.
+
 ## [0.1.1] - 2026-09-21
 
 ### Fixed

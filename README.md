@@ -52,7 +52,7 @@ Peek reads your screen and talks to model providers, so the boundaries are worth
 
 ## Install
 
-Download the latest DMG from [Releases](https://github.com/taiwuchen/peek/releases). Do not use 0.1.0: it was unsigned, and macOS refuses Screen Recording for unsigned apps.
+Download the latest DMG from [Releases](https://github.com/taiwuchen/peek/releases). Do not use 0.1.0: it was unsigned, and macOS refuses Screen Recording for unsigned apps. From 0.1.2 on, Peek checks for updates and installs them in the app; use **Check for Updates...** in the menu bar menu to check now.
 
 Releases are signed with an Apple Development certificate but are not notarized, so macOS blocks the first launch. Open **System Settings → Privacy & Security**, find the message about Peek, select **Open Anyway**, then confirm **Open**. Only bypass this warning for a DMG downloaded from this repository.
 
@@ -69,7 +69,7 @@ xcodegen generate && xcodebuild -scheme Peek -configuration Debug build  # app
 
 Requires Xcode 26 (ScreenCaptureKit needs its concurrency annotations) and [xcodegen](https://github.com/yonaskolb/XcodeGen). `Peek.xcodeproj` is generated from `project.yml` and is not committed. `scripts/build-app.sh` does both steps and prints the built app path. Debug builds are named Peek Dev with bundle ID `com.taiwu.peek.dev`, so they keep their own settings, API keys, and Screen Recording grant and can run beside an installed Peek.
 
-`project.yml` signs with an Apple Development certificate. macOS only honors a Screen Recording grant for a validly signed app, and ties the grant to the signing identity, so it survives rebuilds. Set `DEVELOPMENT_TEAM` to your own team. CI passes `CODE_SIGNING_ALLOWED=NO` to compile without a certificate; such a build cannot capture the screen. `scripts/build-release.sh` builds the signed Release app and DMG.
+`project.yml` signs with an Apple Development certificate. macOS only honors a Screen Recording grant for a validly signed app, and ties the grant to the signing identity, so it survives rebuilds. Set `DEVELOPMENT_TEAM` to your own team. CI passes `CODE_SIGNING_ALLOWED=NO` to compile without a certificate; such a build cannot capture the screen. `scripts/build-release.sh` builds the signed Release app and DMG, plus the Sparkle `appcast.xml`; upload both to a GitHub release that is not marked pre-release.
 
 ### Layout
 
