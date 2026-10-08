@@ -31,7 +31,8 @@ final class PeekAppDelegate: NSObject, NSApplicationDelegate {
             providers: cliProviders(settings: settings) + apiProviders(credentials: credentials),
             settingsStore: settings,
             credentials: credentials,
-            checkForUpdates: updater.map { updater in { updater.checkForUpdates(nil) } }
+            checkForUpdates: updater.map { updater in { updater.checkForUpdates(nil) } },
+            isQA: Bundle.main.bundleIdentifier?.hasSuffix(".dev") == true
         )
         self.controller = controller
         controller.start()

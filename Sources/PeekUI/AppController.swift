@@ -11,6 +11,8 @@ public final class AppController: NSObject, NSMenuDelegate {
     private let settingsModel: SettingsModel
     /// Prod only; Peek Dev has no update feed.
     private let checkForUpdates: (() -> Void)?
+    /// Peek Dev shows a distinct menu bar icon.
+    private let isQA: Bool
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     /// Shortcut names with a registered handler, keyed by mode id.
@@ -20,9 +22,10 @@ public final class AppController: NSObject, NSMenuDelegate {
 
     public init(regionCapturer: any ScreenRegionCapturer,
                 providers: [any AIProvider], settingsStore: any SettingsStore, credentials: any CredentialStore,
-                checkForUpdates: (() -> Void)? = nil) {
+                checkForUpdates: (() -> Void)? = nil, isQA: Bool = false) {
         self.regionCapturer = regionCapturer
         self.checkForUpdates = checkForUpdates
+        self.isQA = isQA
         self.providers = providers
         self.settingsStore = settingsStore
         settingsModel = SettingsModel(providers: providers, store: settingsStore, credentials: credentials)
@@ -32,7 +35,7 @@ public final class AppController: NSObject, NSMenuDelegate {
     public func start() {
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = PeekGlyph.template
+        item.button?.image = isQA ? PeekGlyph.qa : PeekGlyph.template
         let menu = NSMenu()
         menu.delegate = self
         let region = menu.addItem(withTitle: "Ask about screen region", action: #selector(askRegion), keyEquivalent: "")
