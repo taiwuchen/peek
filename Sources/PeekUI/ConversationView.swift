@@ -268,18 +268,6 @@ private struct ConversationTurn: View {
             } else {
                 MarkdownAnswer(text: message.text)
                 if let note { Text(note).font(.caption).foregroundStyle(.secondary) }
-                if !message.text.isEmpty {
-                    Button {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(message.text, forType: .string)
-                    } label: {
-                        Label("Copy", systemImage: "doc.on.doc").font(.caption)
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                    .help("Copy answer")
-                    .accessibilityLabel("Copy answer")
-                }
             }
         }
     }
