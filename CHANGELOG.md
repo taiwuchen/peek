@@ -3,6 +3,25 @@
 Notable changes to Peek. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and Peek aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-10-09
+
+### Added
+
+- A paperclip button in the composer attaches images, PDFs, and text files.
+
+### Changed
+
+- New panel design. On macOS 26 it uses Liquid Glass; macOS 15 keeps the previous material.
+- The compact panel is one bar: mode, screenshot, input, send, and close. With more than one attachment it adds a row of thumbnails above.
+- The mode menu and close button float as pills, and the composer is a capsule. The "You" and "Peek" labels are gone.
+- A whole answer can be selected at once and copied with Command-C. The Copy button under each answer is removed.
+
+### Fixed
+
+- The compact panel shrinks to fit instead of stopping at about 158 points tall.
+- No square frame around the rounded panel when it is focused.
+- The open-hand cursor shows only where dragging the header moves the panel, not over its buttons.
+
 ## [0.1.2] - 2026-10-05
 
 Install this version by hand. From here on, Peek updates itself.
@@ -53,5 +72,7 @@ First public version. The DMG is unsigned and not notarized. Screen Recording do
 - CLI subscription providers are listed before hosted API providers in Settings.
 - Debug builds are signed with an Apple Development certificate so the Screen Recording grant survives rebuilds.
 
+[0.2.0]: https://github.com/taiwuchen/peek/releases/tag/v0.2.0
+[0.1.2]: https://github.com/taiwuchen/peek/releases/tag/v0.1.2
 [0.1.1]: https://github.com/taiwuchen/peek/releases/tag/v0.1.1
 [0.1.0]: https://github.com/taiwuchen/peek/releases/tag/v0.1.0
