@@ -50,7 +50,8 @@ private func composerScrollView(in view: NSView) -> NSScrollView? {
     let content = try #require(panel.contentView)
     let scrollView = try #require(composerScrollView(in: content))
     let input = try #require(scrollView.documentView)
-    #expect(scrollView.contentSize.width > 300)
+    // Compact shares its row with the mode, draft, send, and close buttons.
+    #expect(scrollView.contentSize.width > 150)
     #expect(abs(input.frame.width - scrollView.contentSize.width) < 1)
 }
 

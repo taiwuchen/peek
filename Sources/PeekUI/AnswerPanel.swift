@@ -28,28 +28,22 @@ final class AnswerPanel: NSPanel, NSWindowDelegate {
         backgroundColor = .clear
         hasShadow = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        let effect = PanelContentView()
-        effect.material = .hudWindow
-        effect.blendingMode = .behindWindow
-        effect.state = .active
-        // A stretchable mask, not a layer cornerRadius: the mask shapes the window itself, so the
-        // shadow follows the rounded outline instead of leaving grey wedges in the corner notches.
-        effect.maskImage = PanelContentView.roundedMask(radius: PanelContentView.cornerRadius)
-        effect.onAttachments = { [weak self] in self?.session.addAttachments($0) }
-        effect.onError = { [weak self] in self?.session.reportInputError($0) }
+        let content = PanelContentView()
+        content.onAttachments = { [weak self] in self?.session.addAttachments($0) }
+        content.onError = { [weak self] in self?.session.reportInputError($0) }
         let host = NSHostingView(rootView: ConversationView(session: session, openSettings: openSettings,
                                                            close: { [weak self] in self?.close() },
                                                            fitCompact: { [weak self] in self?.fitCompact(height: $0) },
                                                            expand: { [weak self] in self?.expand() }))
         host.translatesAutoresizingMaskIntoConstraints = false
-        effect.addSubview(host)
+        content.addSubview(host)
         NSLayoutConstraint.activate([
-            host.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
-            host.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
-            host.topAnchor.constraint(equalTo: effect.topAnchor),
-            host.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+            host.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            host.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            host.topAnchor.constraint(equalTo: content.topAnchor),
+            host.bottomAnchor.constraint(equalTo: content.bottomAnchor),
         ])
-        contentView = effect
+        contentView = PanelContentView.background(around: content)
         invalidateShadow()
         delegate = self
         setAccessibilityLabel("Peek conversation")
@@ -83,8 +77,12 @@ final class AnswerPanel: NSPanel, NSWindowDelegate {
         guard isCompact, height > 0 else { return }
         minSize = NSSize(width: Self.fullMinSize.width, height: height)
         maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: height)
-        guard abs(frame.height - height) >= 0.5 else { return }
-        setFrame(panelFrame(frame, height: height, growsUp: growsUp, within: visibleFrame), display: true)
+        // A resize from inside SwiftUI's layout pass is dropped, so apply it once the pass ends.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isCompact, abs(self.frame.height - height) >= 0.5 else { return }
+            self.setFrame(panelFrame(self.frame, height: height, growsUp: self.growsUp, within: self.visibleFrame),
+                          display: true)
+        }
     }
 
     /// Grows to full height away from the cursor, animating only when the panel is already on screen.
@@ -120,11 +118,11 @@ final class AnswerPanel: NSPanel, NSWindowDelegate {
     }
 }
 
-/// The panel's rounded background, which doubles as a drop target so a screenshot or file can be dragged
+/// The panel's content, which doubles as a drop target so a screenshot or file can be dragged
 /// anywhere onto the conversation rather than only onto the composer.
 @MainActor
-final class PanelContentView: NSVisualEffectView {
-    static let cornerRadius: CGFloat = 14
+final class PanelContentView: NSView {
+    static let cornerRadius: CGFloat = 26
 
     var onAttachments: ([Capture.Content]) -> Void = { _ in }
     var onError: (String) -> Void = { _ in }
@@ -148,6 +146,8 @@ final class PanelContentView: NSVisualEffectView {
         super.layout()
         dropHighlight.frame = bounds
     }
+
+    override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {
         super.updateLayer()
@@ -184,6 +184,32 @@ final class PanelContentView: NSVisualEffectView {
         return true
     }
 
+    /// Liquid Glass on macOS 26, the HUD material before it.
+    static func background(around content: NSView) -> NSView {
+        content.autoresizingMask = [.width, .height]
+        if #available(macOS 26, *) {
+            let glass = NSGlassEffectView()
+            glass.cornerRadius = cornerRadius
+            glass.contentView = content
+            // Clip to the rounded shape so the window shadow follows it, not the square frame.
+            glass.wantsLayer = true
+            glass.layer?.cornerRadius = cornerRadius
+            glass.layer?.cornerCurve = .continuous
+            glass.layer?.masksToBounds = true
+            return glass
+        }
+        let effect = NSVisualEffectView()
+        effect.material = .hudWindow
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        // A stretchable mask, not a layer cornerRadius: the mask shapes the window itself, so the
+        // shadow follows the rounded outline instead of leaving grey wedges in the corner notches.
+        effect.maskImage = roundedMask(radius: cornerRadius)
+        content.frame = effect.bounds
+        effect.addSubview(content)
+        return effect
+    }
+
     /// A rounded rectangle stretched from its centre, the shape `maskImage` expects.
     static func roundedMask(radius: CGFloat) -> NSImage {
         let image = NSImage(size: NSSize(width: radius * 2 + 1, height: radius * 2 + 1), flipped: false) { rect in
@@ -203,6 +229,25 @@ struct PanelDragHandle: NSViewRepresentable {
 
     final class DragView: NSView {
         override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
-        override func resetCursorRects() { addCursorRect(bounds, cursor: .openHand) }
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            trackingAreas.forEach(removeTrackingArea)
+            addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .cursorUpdate,
+                                                                  .activeAlways, .inVisibleRect], owner: self))
+        }
+
+        override func cursorUpdate(with event: NSEvent) { updateCursor(event) }
+        override func mouseMoved(with event: NSEvent) { updateCursor(event) }
+        override func mouseExited(with event: NSEvent) { NSCursor.arrow.set() }
+
+        /// Controls sit on top of the handle, so the hand shows only where a click would start a drag.
+        func showsHand(at windowPoint: NSPoint) -> Bool {
+            window?.contentView?.hitTest(windowPoint) === self
+        }
+
+        private func updateCursor(_ event: NSEvent) {
+            (showsHand(at: event.locationInWindow) ? NSCursor.openHand : NSCursor.arrow).set()
+        }
     }
 }

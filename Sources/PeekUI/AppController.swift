@@ -9,7 +9,7 @@ public final class AppController: NSObject, NSMenuDelegate {
     private let providers: [any AIProvider]
     private let settingsStore: any SettingsStore
     private let settingsModel: SettingsModel
-    /// Prod only; Peek Dev has no update feed.
+    /// Nil for local Debug builds, which have no update feed.
     private let checkForUpdates: (() -> Void)?
     /// Peek Dev shows a distinct menu bar icon.
     private let isQA: Bool

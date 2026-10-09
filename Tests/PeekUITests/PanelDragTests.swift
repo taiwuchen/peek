@@ -19,3 +19,16 @@ private final class DragRecordingPanel: NSPanel {
     handle.mouseDown(with: event)
     #expect(panel.dragEvent === event)
 }
+
+@Test @MainActor func dragHandShowsOnlyOutsideControls() {
+    let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 200, height: 40), styleMask: .borderless,
+                        backing: .buffered, defer: false)
+    let content = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 40))
+    let handle = PanelDragHandle.DragView(frame: content.bounds)
+    let button = NSButton(frame: NSRect(x: 160, y: 5, width: 30, height: 30))
+    content.addSubview(handle)
+    content.addSubview(button)
+    panel.contentView = content
+    #expect(handle.showsHand(at: NSPoint(x: 80, y: 20)))
+    #expect(!handle.showsHand(at: NSPoint(x: 175, y: 20)))
+}

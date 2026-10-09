@@ -18,11 +18,9 @@ struct ConversationView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider()
             if !isCompact {
+                header
                 transcript.transition(.opacity)
-                Divider()
             }
             composer
         }
@@ -39,30 +37,45 @@ struct ConversationView: View {
 
     private var header: some View {
         HStack {
-            Menu {
-                ForEach(session.modes) { mode in
-                    Button(mode.name) { session.selectMode(mode.id) }
-                        .disabled(session.isBusy)
-                }
-                Divider()
-                Button("Settings…", systemImage: "gearshape", action: openSettings)
-            } label: {
-                Text(session.modes.first(where: { $0.id == session.selectedModeID })?.name ?? "Choose mode")
-                    .lineLimit(1)
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: 180, alignment: .leading)
-            .accessibilityLabel("Mode")
+            modeMenu
             Spacer()
-            Button(action: close) { Image(systemName: "xmark").frame(width: 24, height: 24) }
-                .buttonStyle(.plain)
-                .help("Close conversation")
-                .accessibilityLabel("Close conversation")
+            closeButton
         }
-        .padding(12)
+        .padding(10)
         // The whole header drags the window; the menu and button sit on top and keep their clicks.
         .background(PanelDragHandle())
+    }
+
+    private var modeMenu: some View {
+        Menu {
+            ForEach(session.modes) { mode in
+                Button(mode.name) { session.selectMode(mode.id) }
+                    .disabled(session.isBusy)
+            }
+            Divider()
+            Button("Settings…", systemImage: "gearshape", action: openSettings)
+        } label: {
+            Text(session.modes.first(where: { $0.id == session.selectedModeID })?.name ?? "Choose mode")
+                .lineLimit(1)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .padding(.horizontal, 12)
+        .frame(height: 30)
+        .glassPill(Capsule())
+        .accessibilityLabel("Mode")
+    }
+
+    private var closeButton: some View {
+        Button(action: close) {
+            Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                .frame(width: 30, height: 30)
+                .glassPill(Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Close conversation")
+        .accessibilityLabel("Close conversation")
     }
 
     private var transcript: some View {
@@ -78,7 +91,8 @@ struct ConversationView: View {
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
-                .padding(16)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .onScrollPhaseChange { _, phase, context in
@@ -102,8 +116,10 @@ struct ConversationView: View {
         }
     }
 
+    /// Compact, this is the whole panel: one row with the mode, draft, input, and close. Expanded, a floating capsule.
+    /// The input keeps its place in both, so it keeps focus as the panel grows.
     private var composer: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             if let message = session.message {
                 Text(message).font(.callout).textSelection(.enabled)
                 HStack {
@@ -115,56 +131,96 @@ struct ConversationView: View {
                     Button("Settings", action: openSettings)
                 }
             }
-            if !session.draft.isEmpty {
+            if !isCompact && !session.draft.isEmpty {
                 ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(Array(session.draft.enumerated()), id: \.offset) { index, capture in
-                            AttachmentPreview(content: capture.content, maxWidth: 120, maxHeight: 56)
-                                .padding(6)
-                                .overlay(alignment: .topTrailing) {
-                                    Button { session.removeDraftAttachment(at: index) } label: {
-                                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Remove attachment")
-                                    .accessibilityLabel("Remove attachment")
-                                }
-                        }
-                    }
+                    HStack(spacing: 8) { drafts(maxWidth: 120, maxHeight: 56) }
+                        .padding(6)
                 }
                 .scrollIndicators(.hidden)
                 // Sent attachments reappear in the transcript, so a fade here would show them twice.
                 .transition(.identity)
             }
-            HStack(alignment: .bottom) {
+            HStack(alignment: isCompact ? .center : .bottom, spacing: 8) {
+                if isCompact {
+                    modeMenu
+                    drafts(maxWidth: 60, maxHeight: 30)
+                }
                 ChatComposer(text: $session.question,
                              placeholder: placeholder,
                              onSubmit: { session.send() },
                              onAttachments: { session.addAttachments($0) },
                              onError: { session.reportInputError($0) })
                     .frame(maxWidth: .infinity)
-                if session.isBusy {
-                    Button(action: session.stop) {
-                        Image(systemName: "stop.circle.fill").font(.title2).frame(width: 28, height: 32)
+                if !isCompact { copyButton }
+                sendButton
+                if isCompact { closeButton }
+            }
+            .padding(.leading, isCompact ? 0 : 14)
+            .padding(.trailing, isCompact ? 0 : 6)
+            .padding(.vertical, isCompact ? 0 : 4)
+            .glassPill(RoundedRectangle(cornerRadius: 22, style: .continuous), visible: !isCompact)
+        }
+        .padding(10)
+        // Compact has no header, so the bar itself drags the window.
+        .background { if isCompact { PanelDragHandle() } }
+    }
+
+    private func drafts(maxWidth: CGFloat, maxHeight: CGFloat) -> some View {
+        ForEach(Array(session.draft.enumerated()), id: \.offset) { index, capture in
+            AttachmentPreview(content: capture.content, maxWidth: maxWidth, maxHeight: maxHeight, cornerRadius: 8)
+                .overlay(alignment: .topTrailing) {
+                    Button { session.removeDraftAttachment(at: index) } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                     }
-                        .help("Stop response")
-                        .accessibilityLabel("Stop response")
-                } else {
-                    Button(action: session.send) {
-                        Image(systemName: "arrow.up.circle.fill").font(.title2).frame(width: 28, height: 32)
-                    }
-                        .disabled(!session.canSend)
-                        .help("Send message")
-                        .accessibilityLabel("Send message")
+                    .buttonStyle(.plain)
+                    .offset(x: 6, y: -6)
+                    .help("Remove attachment")
+                    .accessibilityLabel("Remove attachment")
                 }
+        }
+    }
+
+    private var latestAnswer: String? {
+        session.messages.last(where: { $0.role == .assistant && !$0.text.isEmpty })?.text
+    }
+
+    private var copyButton: some View {
+        Button {
+            guard let latestAnswer else { return }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(latestAnswer, forType: .string)
+        } label: {
+            Image(systemName: "doc.on.doc").font(.system(size: 13)).foregroundStyle(.secondary)
+                .frame(width: 26, height: 34)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(latestAnswer == nil)
+        .help("Copy latest answer")
+        .accessibilityLabel("Copy latest answer")
+    }
+
+    @ViewBuilder private var sendButton: some View {
+        if session.isBusy {
+            Button(action: session.stop) {
+                Image(systemName: "stop.circle.fill").font(.system(size: 26)).frame(width: 30, height: 34)
             }
             .buttonStyle(.plain)
+            .help("Stop response")
+            .accessibilityLabel("Stop response")
+        } else {
+            Button(action: session.send) {
+                Image(systemName: "arrow.up.circle.fill").font(.system(size: 26)).frame(width: 30, height: 34)
+            }
+            .buttonStyle(.plain)
+            .disabled(!session.canSend)
+            .help("Send message")
+            .accessibilityLabel("Send message")
         }
-        .padding(12)
     }
 
     private var placeholder: String {
-        if !session.draft.isEmpty { return "Add context, then press Enter" }
+        if !session.draft.isEmpty { return isCompact ? "Add context…" : "Add context, then press Enter" }
         return isCompact ? "Ask a question" : "Ask a follow-up"
     }
 }
@@ -186,28 +242,17 @@ private struct ConversationTurn: View {
     }
 
     private var turn: some View {
-        VStack(alignment: isUser ? .trailing : .leading, spacing: 8) {
-            HStack {
-                Text(isUser ? "You" : "Peek").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                if !isUser {
-                    Spacer()
-                    if !message.text.isEmpty {
-                        Button("Copy") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(message.text, forType: .string)
-                        }
-                        .font(.caption).buttonStyle(.borderless)
-                        .accessibilityLabel("Copy answer")
-                    }
-                }
-            }
+        VStack(alignment: isUser ? .trailing : .leading, spacing: 6) {
             ForEach(Array(message.captures.enumerated()), id: \.offset) { _, capture in
-                AttachmentPreview(content: capture.content, maxWidth: 200, maxHeight: 120)
+                AttachmentPreview(content: capture.content, maxWidth: 200, maxHeight: 120, cornerRadius: 14)
                     .frame(maxWidth: 200, alignment: isUser ? .trailing : .leading)
             }
             if isUser {
                 if let text = message.captures.isEmpty ? message.text : addedContext {
                     Text(text).multilineTextAlignment(.trailing).textSelection(.enabled)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .glassPill(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
             } else {
                 MarkdownAnswer(text: message.text)
@@ -222,12 +267,16 @@ private struct AttachmentPreview: View {
     let content: Capture.Content
     let maxWidth: CGFloat
     let maxHeight: CGFloat
+    var cornerRadius: CGFloat = 0
 
     var body: some View {
         switch content {
         case .image(let data):
             if let image = NSImage(data: data) {
+                let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 Image(nsImage: image).resizable().scaledToFit()
+                    .clipShape(shape)
+                    .overlay(shape.strokeBorder(.separator))
                     .frame(maxWidth: maxWidth, maxHeight: maxHeight)
                     .accessibilityLabel("Screenshot")
             } else {
@@ -238,5 +287,25 @@ private struct AttachmentPreview: View {
         case .text(let name, _):
             Label(name, systemImage: "doc.text").lineLimit(1).frame(maxWidth: maxWidth)
         }
+    }
+}
+
+/// A translucent fill with a light rim, for controls floating on the panel's glass.
+private struct GlassPill<S: InsettableShape>: ViewModifier {
+    let shape: S
+    let visible: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        let dark = colorScheme == .dark
+        content
+            .background(.white.opacity(visible ? (dark ? 0.1 : 0.5) : 0), in: shape)
+            .overlay(shape.strokeBorder(.white.opacity(visible ? (dark ? 0.22 : 0.8) : 0)).allowsHitTesting(false))
+    }
+}
+
+extension View {
+    fileprivate func glassPill<S: InsettableShape>(_ shape: S, visible: Bool = true) -> some View {
+        modifier(GlassPill(shape: shape, visible: visible))
     }
 }

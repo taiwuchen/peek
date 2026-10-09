@@ -156,7 +156,7 @@ struct ScreenshotDropTests {
         #expect(errors.count == 1)
     }
 
-    @Test func panelIsShapedByAMaskSoItsShadowFollowsTheRoundedCorners() {
+    @Test func panelIsShapedByAMaskSoItsShadowFollowsTheRoundedCorners() throws {
         let mask = PanelContentView.roundedMask(radius: PanelContentView.cornerRadius)
         let radius = PanelContentView.cornerRadius
         #expect(mask.size == NSSize(width: radius * 2 + 1, height: radius * 2 + 1))
@@ -166,11 +166,20 @@ struct ScreenshotDropTests {
         #expect(mask.capInsets.bottom == radius)
         #expect(mask.capInsets.right == radius)
         let content = PanelContentView(frame: NSRect(x: 0, y: 0, width: 420, height: 500))
-        content.maskImage = mask
-        #expect(content.maskImage != nil)
-        // A layer cornerRadius would clip drawing without reshaping the window, leaving the
-        // window shadow squared off and grey in the corner notches.
-        #expect(content.layer?.cornerRadius == 0)
-        #expect(content.layer?.masksToBounds == false)
+        let background = PanelContentView.background(around: content)
+        if #available(macOS 26, *) {
+            let glass = try #require(background as? NSGlassEffectView)
+            #expect(glass.cornerRadius == radius)
+            #expect(glass.contentView === content)
+            #expect(glass.layer?.cornerRadius == radius)
+            #expect(glass.layer?.masksToBounds == true)
+        } else {
+            let effect = try #require(background as? NSVisualEffectView)
+            #expect(effect.maskImage != nil)
+            // A layer cornerRadius would clip drawing without reshaping the window, leaving the
+            // window shadow squared off and grey in the corner notches.
+            #expect(effect.layer?.cornerRadius ?? 0 == 0)
+            #expect(content.superview === effect)
+        }
     }
 }
