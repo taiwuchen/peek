@@ -18,4 +18,4 @@ swift build && swift test          # package
 xcodegen generate && xcodebuild -scheme Peek -configuration Debug build   # app
 ```
 
-Debug builds are the QA app, Peek Dev (`com.taiwu.peek.dev`), and Release builds are prod, Peek (`com.taiwu.peek`). Each has its own settings, Keychain keys, and Screen Recording grant. Test unreleased changes in Peek Dev with `scripts/build-app.sh`; `scripts/build-release.sh` builds the prod DMG.
+Debug builds are the QA app, Peek Dev (`com.taiwu.peek.dev`), and Release builds are prod, Peek (`com.taiwu.peek`). Each has its own settings, Keychain keys, and Screen Recording grant. Test unreleased changes in Peek Dev with `scripts/build-app.sh`. `scripts/build-release.sh [prod|dev]` builds a signed DMG and Sparkle appcast; the `release-prod` and `release-dev` skills publish them so installed apps update in-app.

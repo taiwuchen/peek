@@ -69,4 +69,5 @@ targets:
         Debug:
           PRODUCT_NAME: Peek Dev
           PRODUCT_BUNDLE_IDENTIFIER: com.taiwu.peek.dev
+          # Local builds never update; `scripts/build-release.sh dev` sets the dev feed for released builds.
           SPARKLE_FEED_URL: ""

@@ -21,7 +21,7 @@ final class PeekAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let settings = UserDefaultsSettingsStore()
         let credentials = KeychainCredentialStore(service: "\(Bundle.main.bundleIdentifier!).api-keys")
-        // Only prod has a feed, so Peek Dev never updates itself.
+        // Only released builds have a feed, so local Debug builds never update themselves.
         let feed = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String ?? ""
         let updater = feed.isEmpty ? nil : SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil,
                                                                          userDriverDelegate: nil)
