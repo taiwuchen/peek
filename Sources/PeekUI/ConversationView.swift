@@ -131,7 +131,8 @@ struct ConversationView: View {
                     Button("Settings", action: openSettings)
                 }
             }
-            if !isCompact && !session.draft.isEmpty {
+            // One screenshot fits inline in the compact bar; more get their own row so the input keeps its width.
+            if !session.draft.isEmpty && !(isCompact && session.draft.count == 1) {
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) { drafts(maxWidth: 120, maxHeight: 56) }
                         .padding(6)
@@ -143,7 +144,7 @@ struct ConversationView: View {
             HStack(alignment: isCompact ? .center : .bottom, spacing: 8) {
                 if isCompact {
                     modeMenu
-                    drafts(maxWidth: 60, maxHeight: 30)
+                    if session.draft.count == 1 { drafts(maxWidth: 60, maxHeight: 30) }
                 }
                 ChatComposer(text: $session.question,
                              placeholder: placeholder,
@@ -151,7 +152,7 @@ struct ConversationView: View {
                              onAttachments: { session.addAttachments($0) },
                              onError: { session.reportInputError($0) })
                     .frame(maxWidth: .infinity)
-                if !isCompact { copyButton }
+                if !isCompact { attachButton }
                 sendButton
                 if isCompact { closeButton }
             }
@@ -180,24 +181,34 @@ struct ConversationView: View {
         }
     }
 
-    private var latestAnswer: String? {
-        session.messages.last(where: { $0.role == .assistant && !$0.text.isEmpty })?.text
-    }
-
-    private var copyButton: some View {
-        Button {
-            guard let latestAnswer else { return }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(latestAnswer, forType: .string)
-        } label: {
-            Image(systemName: "doc.on.doc").font(.system(size: 13)).foregroundStyle(.secondary)
+    private var attachButton: some View {
+        Button(action: chooseAttachments) {
+            Image(systemName: "paperclip").font(.system(size: 14)).foregroundStyle(.secondary)
                 .frame(width: 26, height: 34)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(latestAnswer == nil)
-        .help("Copy latest answer")
-        .accessibilityLabel("Copy latest answer")
+        .disabled(session.isBusy)
+        .help("Attach images, PDFs, or text files")
+        .accessibilityLabel("Attach files")
+    }
+
+    private func chooseAttachments() {
+        let picker = NSOpenPanel()
+        picker.allowedContentTypes = [.image, .pdf, .text]
+        picker.allowsMultipleSelection = true
+        picker.canChooseDirectories = false
+        // Above the floating conversation panel, which would otherwise cover it.
+        picker.level = .modalPanel
+        NSApp.activate()
+        Task {
+            guard await picker.begin() == .OK else { return }
+            do {
+                session.addAttachments(try AttachmentInput.attachments(from: picker.urls))
+            } catch {
+                session.reportInputError(error.localizedDescription)
+            }
+        }
     }
 
     @ViewBuilder private var sendButton: some View {
@@ -257,6 +268,18 @@ private struct ConversationTurn: View {
             } else {
                 MarkdownAnswer(text: message.text)
                 if let note { Text(note).font(.caption).foregroundStyle(.secondary) }
+                if !message.text.isEmpty {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(message.text, forType: .string)
+                    } label: {
+                        Label("Copy", systemImage: "doc.on.doc").font(.caption)
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .help("Copy answer")
+                    .accessibilityLabel("Copy answer")
+                }
             }
         }
     }

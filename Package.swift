@@ -12,7 +12,6 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", from: "2.0.0"),
-        .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", exact: "2.4.1"),
     ],
     targets: [
         .target(name: "PeekCore"),
@@ -20,7 +19,7 @@ let package = Package(
         .target(name: "PeekProviders", dependencies: ["PeekCore"]),
         .target(
             name: "PeekUI",
-            dependencies: ["PeekCore", "KeyboardShortcuts", .product(name: "MarkdownUI", package: "swift-markdown-ui")],
+            dependencies: ["PeekCore", "KeyboardShortcuts"],
             resources: [.process("Resources")]
         ),
         .testTarget(name: "PeekCoreTests", dependencies: ["PeekCore"]),
