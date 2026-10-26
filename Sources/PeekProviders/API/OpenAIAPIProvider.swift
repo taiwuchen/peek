@@ -40,7 +40,7 @@ public struct OpenAIAPIProvider: AIProvider {
         }
     }
 
-    public func stream(_ request: AIRequest) -> AsyncThrowingStream<String, Error> {
+    public func stream(_ request: AIRequest) -> AsyncThrowingStream<AIStreamEvent, Error> {
         HTTP.stream(session: session, request: {
             let input: [[String: Any]] = request.messages.map { message in
                 var content: [[String: Any]] = message.captures.map { capture -> [String: Any] in
@@ -59,7 +59,7 @@ public struct OpenAIAPIProvider: AIProvider {
             }
             return try HTTP.request(url: URL(string: "https://api.openai.com/v1/responses")!, headers: headers(), body: [
                 "model": request.model, "stream": true, "instructions": AIRequest.systemPrompt,
-                "input": input,
+                "input": input, "tools": [["type": "web_search"]],
             ])
         }, decode: Self.decode)
     }
@@ -79,6 +79,14 @@ public struct OpenAIAPIProvider: AIProvider {
                 throw ProviderError.malformedResponse("OpenAI text event is missing its delta.")
             }
             return .text([delta])
+        case "response.web_search_call.in_progress":
+            guard let id = object["item_id"] as? String else { return .text([]) }
+            return .activity(AIActivity(id: id, kind: .searchingWeb))
+        case "response.output_item.done":
+            guard let item = object["item"] as? [String: Any], item["type"] as? String == "web_search_call",
+                  let id = item["id"] as? String else { return .text([]) }
+            let query = (item["action"] as? [String: Any])?["query"] as? String
+            return .activity(AIActivity(id: id, kind: .searchingWeb, detail: query))
         case "response.completed": return .finished
         case "error", "response.failed", "response.incomplete":
             let response = object["response"] as? [String: Any]

@@ -38,7 +38,7 @@ public struct CodexCLIProvider: AIProvider {
         return [AIModel(id: "gpt-5.6-sol", displayName: "GPT-5.6 Sol"), AIModel(id: "gpt-5.5", displayName: "GPT-5.5")]
     }
 
-    public func stream(_ request: AIRequest) -> AsyncThrowingStream<String, Error> {
+    public func stream(_ request: AIRequest) -> AsyncThrowingStream<AIStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -48,7 +48,7 @@ public struct CodexCLIProvider: AIProvider {
                     try Task.checkCancellation()
                     let directory = try CLIRequestDirectory(request: request, inlinesPDFs: true)
                     defer { directory.remove() }
-                    var arguments = ["exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only",
+                    var arguments = ["--search", "exec", "--json", "--skip-git-repo-check", "--sandbox", "read-only",
                                      "--ephemeral", "--ignore-user-config", "-m", request.model]
                     for image in directory.images { arguments += ["-i", image.path] }
                     arguments += ["-"]
@@ -57,7 +57,7 @@ public struct CodexCLIProvider: AIProvider {
                     let events = CodexCLIEvents()
                     for try await line in process.lines() {
                         try Task.checkCancellation()
-                        if let text = try events.text(from: line), !text.isEmpty { continuation.yield(text) }
+                        if let event = try events.event(from: line), event != .text("") { continuation.yield(event) }
                     }
                     try Task.checkCancellation()
                 } catch is CancellationError {

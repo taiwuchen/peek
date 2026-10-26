@@ -84,10 +84,11 @@ struct ConversationView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     ForEach(session.messages) { message in
                         ConversationTurn(message: message, addedContext: session.addedContext[message.id],
-                                         note: session.responseNotes[message.id])
+                                         steps: session.steps[message.id] ?? [], note: session.responseNotes[message.id])
                     }
                     if session.isStreaming {
-                        ProgressView("Responding…").controlSize(.small)
+                        ResponseStatus(steps: session.pendingSteps, liveStep: session.liveStep,
+                                       answerStarted: session.messages.last?.role == .assistant)
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
@@ -111,6 +112,9 @@ struct ConversationView: View {
                 scroll.scrollTo("bottom", anchor: .bottom)
             }
             .onChange(of: session.messages.last?.text) { _, _ in
+                if followsResponse { scroll.scrollTo("bottom", anchor: .bottom) }
+            }
+            .onChange(of: session.pendingSteps.count) { _, _ in
                 if followsResponse { scroll.scrollTo("bottom", anchor: .bottom) }
             }
         }
@@ -239,6 +243,7 @@ struct ConversationView: View {
 private struct ConversationTurn: View {
     let message: AIMessage
     let addedContext: String?
+    let steps: [AIActivity]
     let note: String?
 
     private var isUser: Bool { message.role == .user }
@@ -266,6 +271,7 @@ private struct ConversationTurn: View {
                         .glassPill(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
             } else {
+                if !steps.isEmpty { StepsSummary(steps: steps) }
                 MarkdownAnswer(text: message.text)
                 if let note { Text(note).font(.caption).foregroundStyle(.secondary) }
             }

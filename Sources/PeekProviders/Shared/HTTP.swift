@@ -4,6 +4,7 @@ import PeekCore
 enum HTTP {
     enum StreamEvent: Sendable {
         case text([String])
+        case activity(AIActivity)
         case finished
     }
 
@@ -45,7 +46,18 @@ enum HTTP {
         endsOnEOF: Bool = false,
         request: @escaping @Sendable () throws -> URLRequest,
         decode: @escaping @Sendable (SSEEvent) throws -> StreamEvent
-    ) -> AsyncThrowingStream<String, Error> {
+    ) -> AsyncThrowingStream<AIStreamEvent, Error> {
+        stream(session: session, endsOnEOF: endsOnEOF, state: (), request: request) { event, _ in try decode(event) }
+    }
+
+    /// Streams with decoder state that carries across events, such as tool input split over several deltas.
+    static func stream<State: Sendable>(
+        session: URLSession,
+        endsOnEOF: Bool = false,
+        state: State,
+        request: @escaping @Sendable () throws -> URLRequest,
+        decode: @escaping @Sendable (SSEEvent, inout State) throws -> StreamEvent
+    ) -> AsyncThrowingStream<AIStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -62,14 +74,16 @@ enum HTTP {
                             throw ProviderError.http(status: response.statusCode, body: String(decoding: body, as: UTF8.self))
                         }
                         var parser = SSEParser()
+                        var state = state
                         var receivedEvent = false
                         for try await line in SSELineSequence(bytes: bytes) {
                             try Task.checkCancellation()
                             guard let event = parser.consume(line) else { continue }
                             receivedEvent = true
-                            switch try decode(event) {
+                            switch try decode(event, &state) {
                             case .text(let deltas):
-                                for delta in deltas { continuation.yield(delta) }
+                                for delta in deltas { continuation.yield(.text(delta)) }
+                            case .activity(let activity): continuation.yield(.activity(activity))
                             case .finished: return
                             }
                         }

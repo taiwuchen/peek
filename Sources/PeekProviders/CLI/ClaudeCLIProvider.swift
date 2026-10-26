@@ -30,7 +30,7 @@ public struct ClaudeCLIProvider: AIProvider {
          AIModel(id: "sonnet", displayName: "Sonnet"), AIModel(id: "haiku", displayName: "Haiku")]
     }
 
-    public func stream(_ request: AIRequest) -> AsyncThrowingStream<String, Error> {
+    public func stream(_ request: AIRequest) -> AsyncThrowingStream<AIStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -47,16 +47,16 @@ public struct ClaudeCLIProvider: AIProvider {
                     if appSettings.claudeIgnoresInstructions { arguments.append("--safe-mode") }
                     var prompt = directory.transcript
                     if !directory.images.isEmpty || !directory.pdfs.isEmpty {
-                        arguments += ["--tools", "Read", "--allowedTools", "Read"]
+                        arguments += ["--tools", "Read,WebSearch", "--allowedTools", "Read,WebSearch"]
                         prompt = "View the screenshot and PDF files listed in the conversation before answering.\n\n" + prompt
                     } else {
-                        arguments += ["--tools", ""]
+                        arguments += ["--tools", "WebSearch", "--allowedTools", "WebSearch"]
                     }
                     let process = Subprocess(executable: path, arguments: arguments, input: Data(prompt.utf8), directory: directory.url)
                     var events = ClaudeCLIEvents()
                     for try await line in process.lines() {
                         try Task.checkCancellation()
-                        if let text = try events.text(from: line), !text.isEmpty { continuation.yield(text) }
+                        if let event = try events.event(from: line), event != .text("") { continuation.yield(event) }
                     }
                     try Task.checkCancellation()
                 } catch is CancellationError {

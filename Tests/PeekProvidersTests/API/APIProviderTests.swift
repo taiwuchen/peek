@@ -32,9 +32,9 @@ struct APIProviderTests {
         let png = Data([137, 80, 78, 71, 0, 1, 2])
         let capture = Capture(content: .image(png), anchor: nil, sourceBundleID: nil)
         let request = AIRequest(messages: [AIMessage(role: .user, text: "Explain this", captures: image ? [capture] : [])], model: "test-model")
-        var deltas: [String] = []
-        for try await delta in provider.stream(request) { deltas.append(delta) }
-        #expect(deltas == ["Hello", " 世界", "!"])
+        var events: [AIStreamEvent] = []
+        for try await event in provider.stream(request) { events.append(event) }
+        #expect(events == [.text("Hello"), .text(" 世界"), .text("!")])
         let sent = try #require(stub.requests.first)
         #expect(stub.requests.count == 1)
         #expect(sent.httpMethod == "POST")
@@ -53,6 +53,9 @@ struct APIProviderTests {
             #expect(object["system"] as? String == AIRequest.systemPrompt)
             #expect(object["thinking"] == nil)
             #expect(object["temperature"] == nil)
+            let tools = try #require(object["tools"] as? [[String: Any]])
+            #expect(tools.first?["type"] as? String == "web_search_20250305")
+            #expect(tools.first?["name"] as? String == "web_search")
             let messages = try #require(object["messages"] as? [[String: Any]])
             #expect(messages.count == 1)
             #expect(messages.first?["role"] as? String == "user")
@@ -69,6 +72,7 @@ struct APIProviderTests {
             #expect(object["model"] as? String == request.model)
             #expect(object["stream"] as? Bool == true)
             #expect(object["instructions"] as? String == AIRequest.systemPrompt)
+            #expect(object["tools"] as? [[String: String]] == [["type": "web_search"]])
             let input = try #require(object["input"] as? [[String: Any]])
             #expect(input.count == 1)
             #expect(input.first?["role"] as? String == "user")
@@ -83,6 +87,8 @@ struct APIProviderTests {
             #expect(sent.value(forHTTPHeaderField: "x-goog-api-key") == "test-key")
             let system = try #require(object["system_instruction"] as? [String: Any])
             #expect(system["parts"] as? [[String: String]] == [["text": AIRequest.systemPrompt]])
+            let tools = try #require(object["tools"] as? [[String: Any]])
+            #expect(tools.first?["google_search"] is [String: Any])
             let contents = try #require(object["contents"] as? [[String: Any]])
             #expect(contents.count == 1)
             #expect(contents.first?["role"] as? String == "user")
@@ -242,6 +248,50 @@ struct APIProviderTests {
     }
 
     @Test(arguments: [ProviderID.anthropicAPI, .openAIAPI])
+    func webSearchIsReportedAsActivity(id: ProviderID) async throws {
+        let body = id == .anthropicAPI ? """
+            data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{}}}
+
+            data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\\"query\\\": \\\"news\\\"}"}}
+
+            data: {"type":"content_block_stop","index":0}
+
+            data: {"type":"content_block_start","index":1,"content_block":{"type":"web_search_tool_result"}}
+
+            data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Found"}}
+
+            data: {"type":"message_stop"}
+
+
+            """ : """
+            data: {"type":"response.web_search_call.in_progress","item_id":"ws_1"}
+
+            data: {"type":"response.web_search_call.completed","item_id":"ws_1"}
+
+            data: {"type":"response.output_item.done","item":{"id":"ws_1","type":"web_search_call","action":{"type":"search","query":"news"}}}
+
+            data: {"type":"response.output_text.delta","delta":"Found"}
+
+            data: {"type":"response.completed"}
+
+
+            """
+        let stub = APIStub(body: body)
+        let session = stub.session()
+        defer { session.invalidateAndCancel(); stub.remove() }
+        let credentials = InMemoryCredentialStore()
+        try credentials.setAPIKey("test-key", for: id)
+        let provider = apiProvider(id, credentials: credentials, session: session)
+        var events: [AIStreamEvent] = []
+        for try await event in provider.stream(AIRequest(messages: [AIMessage(role: .user, text: "test")], model: "model")) {
+            events.append(event)
+        }
+        let callID = id == .anthropicAPI ? "srvtoolu_1" : "ws_1"
+        #expect(events == [.activity(AIActivity(id: callID, kind: .searchingWeb)),
+                           .activity(AIActivity(id: callID, kind: .searchingWeb, detail: "news")), .text("Found")])
+    }
+
+    @Test(arguments: [ProviderID.anthropicAPI, .openAIAPI])
     func truncatedStreamThrows(id: ProviderID) async throws {
         let body = id == .anthropicAPI
             ? "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"partial\"}}\n\n"
@@ -259,7 +309,9 @@ struct APIProviderTests {
         let provider = apiProvider(id, credentials: credentials, session: session)
         let task = Task {
             var text = ""
-            for try await delta in provider.stream(AIRequest(messages: [AIMessage(role: .user, text: "test")], model: "model")) { text += delta }
+            for try await event in provider.stream(AIRequest(messages: [AIMessage(role: .user, text: "test")], model: "model")) {
+                if case .text(let delta) = event { text += delta }
+            }
             return text
         }
         defer { task.cancel() }

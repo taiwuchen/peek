@@ -39,8 +39,8 @@ public struct AnthropicAPIProvider: AIProvider {
         }
     }
 
-    public func stream(_ request: AIRequest) -> AsyncThrowingStream<String, Error> {
-        HTTP.stream(session: session, request: {
+    public func stream(_ request: AIRequest) -> AsyncThrowingStream<AIStreamEvent, Error> {
+        HTTP.stream(session: session, state: AnthropicToolCalls(), request: {
             let messages: [[String: Any]] = request.messages.map { message in
                 var content: [[String: Any]] = message.captures.map { capture -> [String: Any] in
                     switch capture.content {
@@ -62,6 +62,7 @@ public struct AnthropicAPIProvider: AIProvider {
             return try HTTP.request(url: URL(string: "https://api.anthropic.com/v1/messages")!, headers: headers(), body: [
                 "model": request.model, "max_tokens": 8192, "stream": true,
                 "system": AIRequest.systemPrompt, "messages": messages,
+                "tools": [["type": "web_search_20250305", "name": "web_search", "max_uses": 5]],
             ])
         }, decode: Self.decode)
     }
@@ -70,7 +71,7 @@ public struct AnthropicAPIProvider: AIProvider {
         ["x-api-key": try HTTP.apiKey(credentials, for: id), "anthropic-version": "2023-06-01", "Content-Type": "application/json"]
     }
 
-    private static func decode(_ event: SSEEvent) throws -> HTTP.StreamEvent {
+    private static func decode(_ event: SSEEvent, tools: inout AnthropicToolCalls) throws -> HTTP.StreamEvent {
         let object = try HTTP.object(event)
         if event.event == "error" || object["type"] as? String == "error" {
             let error = object["error"] as? [String: Any]
@@ -79,6 +80,7 @@ public struct AnthropicAPIProvider: AIProvider {
         guard let type = object["type"] as? String else {
             throw ProviderError.malformedResponse("Anthropic event is missing its type.")
         }
+        if let activity = tools.activity(from: object) { return .activity(activity) }
         switch type {
         case "content_block_delta":
             guard let delta = object["delta"] as? [String: Any], let deltaType = delta["type"] as? String else {

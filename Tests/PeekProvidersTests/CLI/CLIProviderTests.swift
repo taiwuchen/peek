@@ -75,7 +75,9 @@ struct CLIProviderTests {
         let provider = try #require(cliProviders(settings: settings).first { $0.id == id })
         let conversation = ConversationFixture()
         var text = ""
-        for try await delta in provider.stream(conversation.request) { text += delta }
+        for try await event in provider.stream(conversation.request) {
+            if case .text(let delta) = event { text += delta }
+        }
         #expect(text == "answer")
         let names = ["turn-1-capture-1.png", "turn-5-capture-1.png", "turn-5-capture-2.png"]
         for (index, name) in names.enumerated() {
@@ -120,7 +122,7 @@ struct CLIProviderTests {
         } else {
             #expect(arguments.contains("--no-session-persistence"))
             #expect(arguments.contains("--safe-mode"))
-            #expect(arguments.contains("Read"))
+            #expect(arguments.contains("Read,WebSearch"))
             #expect(prompt.contains("View the screenshot and PDF files"))
         }
     }
@@ -166,7 +168,7 @@ struct CLIProviderTests {
         if id == .claudeCLI {
             #expect(try Data(contentsOf: fake.directory.appendingPathComponent("turn-1-file-1.pdf")) == pdf)
             #expect(files[0]["path"]?.hasSuffix("turn-1-file-1.pdf") == true)
-            #expect(arguments.contains("Read"))
+            #expect(arguments.contains("Read,WebSearch"))
         } else {
             #expect(files[0]["text"]?.contains("Quarterly total 42") == true)
             #expect(files[0]["path"] == nil)
@@ -226,7 +228,8 @@ struct CLIProviderTests {
         if !images {
             let arguments = try record("args", from: fake).components(separatedBy: "\n")
             #expect(!arguments.contains("-i"))
-            #expect(!arguments.contains("Read"))
+            #expect(!arguments.contains("Read,WebSearch"))
+            #expect(arguments.contains(id == .claudeCLI ? "WebSearch" : "--search"))
         }
     }
 

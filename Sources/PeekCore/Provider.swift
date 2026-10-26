@@ -57,6 +57,32 @@ public struct AIRequest: Sendable {
     }
 }
 
+/// A tool call the provider makes while answering. A later event with the same id fills in its detail.
+public struct AIActivity: Sendable, Equatable {
+    public enum Kind: Sendable, Equatable {
+        case searchingWeb
+        case readingFiles
+        case runningCommand
+    }
+
+    public let id: String
+    public let kind: Kind
+    /// Search query, file name, or command, once the provider reports it.
+    public let detail: String?
+
+    public init(id: String, kind: Kind, detail: String? = nil) {
+        self.id = id
+        self.kind = kind
+        self.detail = detail.flatMap { $0.isEmpty ? nil : $0 }
+    }
+}
+
+/// One piece of a streamed answer.
+public enum AIStreamEvent: Sendable, Equatable {
+    case text(String)
+    case activity(AIActivity)
+}
+
 public enum ProviderError: Error, Sendable, Equatable {
     case notAvailable(ProviderAvailability)
     case imagesNotSupported
@@ -74,8 +100,8 @@ public protocol AIProvider: Sendable {
 
     func availability() async -> ProviderAvailability
     func models() async throws -> [AIModel]
-    /// Streams answer text deltas. Finishes when the answer is complete; throws ProviderError on failure.
-    func stream(_ request: AIRequest) -> AsyncThrowingStream<String, Error>
+    /// Streams answer text deltas and tool activity. Finishes when the answer is complete; throws ProviderError on failure.
+    func stream(_ request: AIRequest) -> AsyncThrowingStream<AIStreamEvent, Error>
 }
 
 extension AIRequest {

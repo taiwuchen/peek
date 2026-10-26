@@ -26,15 +26,15 @@ struct TestProvider: AIProvider {
     var id: ProviderID = .anthropicAPI
     var displayName: String = "Test"
     var supportsImages: Bool = true
-    var respond: @Sendable (AIRequest) -> AsyncThrowingStream<String, Error> = { request in
+    var respond: @Sendable (AIRequest) -> AsyncThrowingStream<AIStreamEvent, Error> = { request in
         AsyncThrowingStream { continuation in
-            continuation.yield("Answer: " + (request.messages.last?.text ?? ""))
+            continuation.yield(.text("Answer: " + (request.messages.last?.text ?? "")))
             continuation.finish()
         }
     }
     func availability() async -> ProviderAvailability { .ready }
     func models() async throws -> [AIModel] { [AIModel(id: "test-model", displayName: "Test model")] }
-    func stream(_ request: AIRequest) -> AsyncThrowingStream<String, Error> { respond(request) }
+    func stream(_ request: AIRequest) -> AsyncThrowingStream<AIStreamEvent, Error> { respond(request) }
 }
 
 @MainActor
@@ -58,7 +58,7 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     let mode = PromptMode(name: "Translate", prompt: "Translate this into French")
     let session = makeSession(provider: TestProvider(respond: { request in
         requests.withLock { $0.append(request) }
-        return AsyncThrowingStream { $0.yield("Translated answer"); $0.finish() }
+        return AsyncThrowingStream { $0.yield(.text("Translated answer")); $0.finish() }
     }), settings: AppSettings(modes: [mode], selectedModeID: mode.id))
     session.beginCapture()
     try await waitUntil { !session.isBusy }
@@ -80,7 +80,7 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     let requests = Mutex<[AIRequest]>([])
     let session = makeSession(provider: TestProvider(respond: { request in
         requests.withLock { $0.append(request) }
-        return AsyncThrowingStream { $0.yield("Answer"); $0.finish() }
+        return AsyncThrowingStream { $0.yield(.text("Answer")); $0.finish() }
     }))
     session.beginCapture()
     try await waitUntil { !session.isBusy }
@@ -95,8 +95,32 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     #expect(sent.last?.messages.flatMap(\.captures).count == 2)
 }
 
+@Test @MainActor func toolStepsKeepTheirOrderAndLiveStepEndsWhenTextResumes() async throws {
+    let (stream, continuation) = AsyncThrowingStream<AIStreamEvent, Error>.makeStream()
+    let session = makeSession(provider: TestProvider(respond: { _ in stream }))
+    session.beginCapture()
+    try await waitUntil { session.isStreaming }
+    continuation.yield(.activity(AIActivity(id: "a", kind: .searchingWeb)))
+    continuation.yield(.activity(AIActivity(id: "b", kind: .readingFiles, detail: "notes.txt")))
+    continuation.yield(.activity(AIActivity(id: "a", kind: .searchingWeb, detail: "swift")))
+    try await waitUntil { session.pendingSteps.first?.detail == "swift" }
+    #expect(session.pendingSteps.map(\.id) == ["a", "b"])
+    #expect(session.liveStep?.id == "b")
+    continuation.yield(.text("Let me search."))
+    try await waitUntil { session.liveStep == nil }
+    continuation.yield(.activity(AIActivity(id: "c", kind: .searchingWeb)))
+    try await waitUntil { session.liveStep?.id == "c" }
+    continuation.yield(.text("Found it."))
+    continuation.finish()
+    try await waitUntil { !session.isStreaming }
+    let answer = try #require(session.messages.last)
+    #expect(answer.text == "Let me search.\n\nFound it.")
+    #expect(session.steps[answer.id]?.map(\.id) == ["a", "b", "c"])
+    #expect(session.liveStep == nil)
+}
+
 @Test @MainActor func streamingRejectsOverlappingSubmitsAndCapturesAndStopRetainsPartialAnswer() async throws {
-    let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
+    let (stream, continuation) = AsyncThrowingStream<AIStreamEvent, Error>.makeStream()
     let cancelled = Mutex(false)
     continuation.onTermination = { reason in
         if case .cancelled = reason { cancelled.withLock { $0 = true } }
@@ -104,7 +128,7 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     let session = makeSession(provider: TestProvider(respond: { _ in stream }))
     session.beginCapture()
     try await waitUntil { session.isStreaming }
-    continuation.yield("First")
+    continuation.yield(.text("First"))
     try await waitUntil { session.messages.last?.text == "First" }
     session.question = "Follow up"
     session.send()
@@ -112,7 +136,7 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     #expect(session.messages.count == 2)
     #expect(session.question == "Follow up")
     session.stop()
-    continuation.yield(" stale")
+    continuation.yield(.text(" stale"))
     try await waitUntil { cancelled.withLock { $0 } }
     #expect(session.messages.last?.text == "First")
     #expect(session.responseNotes[session.messages.last!.id] == "Stopped")
@@ -126,10 +150,10 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
         let attempt = requests.withLock { $0.append(request); return $0.count }
         return AsyncThrowingStream {
             if attempt == 2 {
-                $0.yield("Incomplete")
+                $0.yield(.text("Incomplete"))
                 $0.finish(throwing: ProviderError.http(status: 500, body: "failure"))
             } else {
-                $0.yield("Complete")
+                $0.yield(.text("Complete"))
                 $0.finish()
             }
         }
@@ -195,7 +219,7 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
 }
 
 @Test @MainActor func cancelStopsStreamKeepsPartialAnswerAndIgnoresLateDeltas() async throws {
-    let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
+    let (stream, continuation) = AsyncThrowingStream<AIStreamEvent, Error>.makeStream()
     let cancelled = Mutex(false)
     continuation.onTermination = { reason in
         if case .cancelled = reason { cancelled.withLock { $0 = true } }
@@ -203,11 +227,11 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     let session = makeSession(provider: TestProvider(respond: { _ in stream }))
     session.beginCapture()
     try await waitUntil { session.isStreaming }
-    continuation.yield("Old answer")
+    continuation.yield(.text("Old answer"))
     try await waitUntil { session.messages.count == 2 }
     session.cancel()
     #expect(!session.isBusy)
-    continuation.yield(" stale")
+    continuation.yield(.text(" stale"))
     try await waitUntil { cancelled.withLock { $0 } }
     try await Task.sleep(for: .milliseconds(10))
     #expect(session.messages.last?.text == "Old answer")
@@ -289,7 +313,7 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     let defaults = UserDefaults(suiteName: "PeekUIController.\(UUID())")!
     let store = UserDefaultsSettingsStore(defaults: defaults)
     store.save(AppSettings())
-    let continuations = Mutex<[AsyncThrowingStream<String, Error>.Continuation]>([])
+    let continuations = Mutex<[AsyncThrowingStream<AIStreamEvent, Error>.Continuation]>([])
     let controller = AppController(regionCapturer: region, providers: [TestProvider(respond: { _ in
         AsyncThrowingStream { continuation in continuations.withLock { $0.append(continuation) } }
     })], settingsStore: store, credentials: InMemoryCredentialStore())
@@ -327,7 +351,7 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     let mode = PromptMode(name: "Translate", prompt: "Translate this into French")
     let session = makeSession(provider: TestProvider(respond: { request in
         requests.withLock { $0.append(request) }
-        return AsyncThrowingStream { $0.yield("Translated answer"); $0.finish() }
+        return AsyncThrowingStream { $0.yield(.text("Translated answer")); $0.finish() }
     }), settings: AppSettings(modes: [mode], selectedModeID: mode.id))
     session.beginCapture()
     try await waitUntil { !session.isBusy }
@@ -348,7 +372,7 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
 }
 
 @Test @MainActor func screenshotImportRejectsBusyOrInvalidModeWithoutDiscardingConversation() async throws {
-    let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
+    let (stream, continuation) = AsyncThrowingStream<AIStreamEvent, Error>.makeStream()
     defer { continuation.finish() }
     let session = makeSession(provider: TestProvider(respond: { _ in stream }))
     session.addAttachments([.image(Data([1]))])
@@ -400,7 +424,7 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     let mode = PromptMode(name: "Explain", prompt: "Explain this", waitsForContext: true)
     let session = makeSession(provider: TestProvider(respond: { request in
         requests.withLock { $0.append(request) }
-        return AsyncThrowingStream { $0.yield("Answer"); $0.finish() }
+        return AsyncThrowingStream { $0.yield(.text("Answer")); $0.finish() }
     }), settings: AppSettings(modes: [mode], selectedModeID: mode.id))
     var presented = 0
     session.onPresent = { presented += 1 }
@@ -436,12 +460,12 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
 }
 
 @Test @MainActor func waitingModeHoldsAttachmentsAddedWhileStreamingAndSendsPromptAlone() async throws {
-    let (stream, continuation) = AsyncThrowingStream<String, Error>.makeStream()
+    let (stream, continuation) = AsyncThrowingStream<AIStreamEvent, Error>.makeStream()
     let requests = Mutex<[AIRequest]>([])
     let mode = PromptMode(name: "Explain", prompt: "Explain this", waitsForContext: true)
     let session = makeSession(provider: TestProvider(respond: { request in
         let count = requests.withLock { $0.append(request); return $0.count }
-        return count == 1 ? stream : AsyncThrowingStream { $0.yield("Second"); $0.finish() }
+        return count == 1 ? stream : AsyncThrowingStream { $0.yield(.text("Second")); $0.finish() }
     }), settings: AppSettings(modes: [mode], selectedModeID: mode.id))
     session.beginCapture()
     try await waitUntil { !session.isBusy }
@@ -451,7 +475,7 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     #expect(session.draft.count == 1)
     #expect(session.message == nil)
     #expect(!session.canSend)
-    continuation.yield("First")
+    continuation.yield(.text("First"))
     continuation.finish()
     try await waitUntil { !session.isBusy }
     session.send()
@@ -472,7 +496,7 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     store.save(AppSettings(modes: [review, translate], selectedModeID: review.id))
     let session = AskSession(regionCapturer: Region(), providers: [TestProvider(respond: { request in
         requests.withLock { $0.append(request) }
-        return AsyncThrowingStream { $0.yield("Answer"); $0.finish() }
+        return AsyncThrowingStream { $0.yield(.text("Answer")); $0.finish() }
     })], settingsStore: store)
     session.beginCapture()
     try await waitUntil { !session.isBusy }

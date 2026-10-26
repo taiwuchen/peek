@@ -34,7 +34,7 @@ public struct GeminiAPIProvider: AIProvider {
         }
     }
 
-    public func stream(_ request: AIRequest) -> AsyncThrowingStream<String, Error> {
+    public func stream(_ request: AIRequest) -> AsyncThrowingStream<AIStreamEvent, Error> {
         HTTP.stream(session: session, endsOnEOF: true, request: {
             let contents: [[String: Any]] = request.messages.map { message in
                 var parts: [[String: Any]] = message.captures.map { capture -> [String: Any] in
@@ -56,7 +56,7 @@ public struct GeminiAPIProvider: AIProvider {
             guard let url = components.url else { throw ProviderError.malformedResponse("Invalid Gemini model URL.") }
             return try HTTP.request(url: url, headers: headers(), body: [
                 "system_instruction": ["parts": [["text": AIRequest.systemPrompt]]],
-                "contents": contents,
+                "contents": contents, "tools": [["google_search": [String: Any]()]],
             ])
         }, decode: Self.decode)
     }

@@ -17,6 +17,10 @@ final class AskSession {
     private(set) var message: String?
     private(set) var needsScreenRecordingPermission = false
     private(set) var isStreaming = false
+    /// Tool calls per assistant message, in the order the provider made them.
+    private(set) var steps: [UUID: [AIActivity]] = [:]
+    /// Tool call still running, shown in the status line until answer text resumes.
+    private(set) var liveStep: AIActivity?
     private(set) var isCapturing = false
     private(set) var providerID: ProviderID
     private(set) var model: String
@@ -37,6 +41,8 @@ final class AskSession {
     var canSend: Bool {
         !isBusy && (!draft.isEmpty || !question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
+    /// Steps of the response being streamed, which can come before any answer text.
+    var pendingSteps: [AIActivity] { responseID.flatMap { steps[$0] } ?? [] }
     var latestCapture: Capture? { draft.last ?? messages.last(where: { !$0.captures.isEmpty })?.captures.last }
 
     init(regionCapturer: any ScreenRegionCapturer, providers: [any AIProvider], settingsStore: any SettingsStore) {
@@ -219,6 +225,7 @@ final class AskSession {
         task?.cancel()
         task = nil
         isStreaming = false
+        liveStep = nil
         isCapturing = false
     }
 
@@ -238,6 +245,7 @@ final class AskSession {
         defer {
             if generation == token {
                 isStreaming = false
+                liveStep = nil
                 task = nil
             }
         }
@@ -250,13 +258,23 @@ final class AskSession {
         responseID = assistantID
         messages.removeAll { $0.id == assistantID }
         responseNotes[assistantID] = nil
+        steps[assistantID] = nil
         do {
-            for try await delta in provider.stream(request) {
+            for try await event in provider.stream(request) {
                 guard generation == token, !Task.isCancelled else { return }
-                if let index = messages.firstIndex(where: { $0.id == assistantID }) {
-                    messages[index].text += delta
-                } else if !delta.isEmpty {
-                    messages.append(AIMessage(id: assistantID, role: .assistant, text: delta))
+                switch event {
+                case .activity(let next):
+                    record(next, for: assistantID)
+                case .text(var delta):
+                    if let index = messages.firstIndex(where: { $0.id == assistantID }) {
+                        // Text after a tool call starts a new paragraph.
+                        if liveStep != nil, !messages[index].text.isEmpty { delta = "\n\n" + delta }
+                        liveStep = nil
+                        messages[index].text += delta
+                    } else if !delta.isEmpty {
+                        liveStep = nil
+                        messages.append(AIMessage(id: assistantID, role: .assistant, text: delta))
+                    }
                 }
             }
             guard generation == token, !Task.isCancelled else { return }
@@ -272,6 +290,19 @@ final class AskSession {
                 responseNotes[assistantID] = "Incomplete response"
             }
         }
+    }
+
+    /// Adds a new tool call as the live step, or fills in the detail of one already listed.
+    private func record(_ step: AIActivity, for assistantID: UUID) {
+        var list = steps[assistantID] ?? []
+        if let index = list.firstIndex(where: { $0.id == step.id }) {
+            list[index] = AIActivity(id: step.id, kind: step.kind, detail: step.detail ?? list[index].detail)
+            if liveStep?.id == step.id { liveStep = list[index] }
+        } else {
+            list.append(step)
+            liveStep = step
+        }
+        steps[assistantID] = list
     }
 }
 
