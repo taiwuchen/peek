@@ -3,6 +3,18 @@
 Notable changes to Peek. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and Peek aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-11-01
+
+### Added
+
+- Answers can search the web. Hosted APIs (Anthropic, OpenAI, Gemini), Claude Code, and Codex all have web search turned on.
+- While an answer is pending, each web search, file read, or command shows as a step with its query, in order.
+
+### Changed
+
+- A typed status line replaces the Responding spinner and shows what Peek is doing right now.
+- When the answer arrives, its steps fold into one summary line above it, such as "Searched the web 2 times · Read 1 file". Click it to see each step.
+
 ## [0.2.0] - 2026-10-09
 
 ### Added
