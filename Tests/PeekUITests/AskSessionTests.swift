@@ -346,7 +346,7 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     continuations.withLock { $0.forEach { $0.finish() } }
 }
 
-@Test @MainActor func importedScreenshotsAutomaticallyUseModeAndPreserveHistoryAndDraft() async throws {
+@Test @MainActor func importedScreenshotsWaitInDraftAndSendWithModePromptAndText() async throws {
     let requests = Mutex<[AIRequest]>([])
     let mode = PromptMode(name: "Translate", prompt: "Translate this into French")
     let session = makeSession(provider: TestProvider(respond: { request in
@@ -356,38 +356,74 @@ private func makeSession(provider: TestProvider = TestProvider(), region: any Sc
     session.beginCapture()
     try await waitUntil { !session.isBusy }
     let history = session.messages
-    session.question = "My next question"
     let images = [Data([4, 5, 6]), Data([7, 8, 9])]
     session.addAttachments(images.map(Capture.Content.image))
+    #expect(session.messages == history)
+    #expect(session.draft.map(\.content) == images.map(Capture.Content.image))
+    #expect(!session.isBusy)
+    #expect(requests.withLock { $0.count } == 1)
+    session.question = "My next question"
+    session.send()
     try await waitUntil { !session.isBusy }
     #expect(Array(session.messages.prefix(2)) == history)
     #expect(session.messages.count == 4)
-    #expect(session.messages[2].text == mode.prompt)
+    #expect(session.messages[2].text == mode.prompt + "\n\nMy next question")
     #expect(session.messages[2].captures.map(\.content) == images.map(Capture.Content.image))
-    #expect(session.question == "My next question")
+    #expect(session.draft.isEmpty)
+    #expect(session.question.isEmpty)
     let sent = requests.withLock { $0 }
     #expect(sent.count == 2)
+    #expect(Array(sent[1].messages.prefix(2)) == history)
     #expect(sent[1].messages.flatMap(\.captures).count == 3)
-    #expect(sent[1].messages.last?.text == mode.prompt)
+    #expect(sent[1].messages.last?.text == mode.prompt + "\n\nMy next question")
 }
 
-@Test @MainActor func screenshotImportRejectsBusyOrInvalidModeWithoutDiscardingConversation() async throws {
+@Test @MainActor func screenshotImportWhileStreamingFillsDraftAndRejectsInvalidMode() async throws {
     let (stream, continuation) = AsyncThrowingStream<AIStreamEvent, Error>.makeStream()
     defer { continuation.finish() }
     let session = makeSession(provider: TestProvider(respond: { _ in stream }))
-    session.addAttachments([.image(Data([1]))])
+    session.beginCapture()
     try await waitUntil { session.isStreaming }
+    continuation.yield(.text("Partial"))
+    try await waitUntil { session.messages.last?.text == "Partial" }
     let history = session.messages
     session.addAttachments([.image(Data([2]))])
     #expect(session.messages == history)
-    #expect(session.message?.contains("Stop") == true)
+    #expect(session.draft.map(\.content) == [.image(Data([2]))])
+    #expect(session.message == nil)
     #expect(session.isStreaming)
+    #expect(!session.canSend)
     session.stop()
     let invalid = makeSession(settings: AppSettings(modes: []))
     invalid.addAttachments([.image(Data([1]))])
     #expect(invalid.messages.isEmpty)
+    #expect(invalid.draft.isEmpty)
     #expect(!invalid.isBusy)
     #expect(invalid.message?.contains("name and prompt") == true)
+}
+
+@Test @MainActor func pastedImagesWithoutCaptureSendAsOneMessageWithModePrompt() async throws {
+    let requests = Mutex<[AIRequest]>([])
+    let mode = PromptMode(name: "Explain", prompt: "Explain this")
+    let session = makeSession(provider: TestProvider(respond: { request in
+        requests.withLock { $0.append(request) }
+        return AsyncThrowingStream { $0.yield(.text("Answer")); $0.finish() }
+    }), settings: AppSettings(modes: [mode], selectedModeID: mode.id))
+    session.addAttachments([.image(Data([1]))])
+    session.addAttachments([.image(Data([2]))])
+    #expect(session.messages.isEmpty)
+    #expect(session.draft.count == 2)
+    #expect(requests.withLock { $0.isEmpty })
+    session.question = "Compare them"
+    session.send()
+    try await waitUntil { !session.isBusy }
+    let sent = try #require(requests.withLock { $0.first })
+    #expect(requests.withLock { $0.count } == 1)
+    #expect(sent.messages.count == 1)
+    #expect(sent.messages.last?.text == "Explain this\n\nCompare them")
+    #expect(sent.messages.last?.captures.map(\.content) == [.image(Data([1])), .image(Data([2]))])
+    #expect(session.messages.count == 2)
+    #expect(session.draft.isEmpty)
 }
 
 @Test @MainActor func blankModeCannotCapture() {

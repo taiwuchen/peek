@@ -119,26 +119,13 @@ final class AskSession {
         }
     }
 
-    /// Sends pasted or dropped attachments with the mode prompt, or holds them in the draft when one is pending or the mode waits for context.
+    /// Holds pasted, dropped, or picked attachments in the draft until the user sends.
     func addAttachments(_ contents: [Capture.Content]) {
         guard !contents.isEmpty else { return }
         let captures = contents.map { Capture(content: $0, anchor: nil, sourceBundleID: nil) }
-        if let draftMode {
-            addToDraft(captures, mode: draftMode)
-            return
-        }
+        if let draftMode { return addToDraft(captures, mode: draftMode) }
         guard let mode = activeMode() else { return }
-        if mode.waitsForContext {
-            addToDraft(captures, mode: mode)
-            return
-        }
-        guard !isBusy else {
-            reportInputError("Stop the current response before adding a screenshot or file.")
-            return
-        }
-        appendAttachments(captures, prompt: mode.prompt)
-        startResponse()
-        onPresent?()
+        addToDraft(captures, mode: mode)
     }
 
     func removeDraftAttachment(at index: Int) {
