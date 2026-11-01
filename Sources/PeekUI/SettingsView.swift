@@ -56,7 +56,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .controlBackgroundColor))
         }
-        .frame(width: 860, height: 620)
+        .frame(minWidth: 860, maxWidth: .infinity, minHeight: 620, maxHeight: .infinity)
         .ignoresSafeArea()
     }
 }
@@ -94,9 +94,12 @@ struct SettingsDrawer<Content: View>: View {
             content
                 .frame(width: 320)
                 .frame(maxHeight: .infinity, alignment: .top)
-                .background(Color(nsColor: .controlBackgroundColor))
-                .overlay(alignment: .leading) { Divider() }
-                .shadow(color: .black.opacity(0.08), radius: 14, x: -6)
+                .background {
+                    Rectangle()
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                        .shadow(color: .black.opacity(0.08), radius: 14, x: -6)
+                }
+                .overlay(alignment: .leading) { Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: 1) }
                 .transition(.move(edge: .trailing))
         }
         .transition(.opacity)
@@ -147,6 +150,7 @@ struct ProvidersSettingsView: View {
             }
             .settingsPage()
         }
+        .accessibilityHidden(openID != nil)
         .overlay {
             if let provider = model.providers.first(where: { $0.id == openID }) {
                 SettingsDrawer(close: { openID = nil }) {
@@ -241,7 +245,9 @@ private struct ProviderDetail: View {
             HStack {
                 Text(provider.displayName).font(.system(size: 16, weight: .semibold)).lineLimit(1)
                 Spacer()
-                Button("Done", action: close).keyboardShortcut(.defaultAction)
+                Button("Done", action: close)
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.cancelAction)
             }
             StatusLabel(text: availability?.label ?? "Checking…", color: availability == .ready ? .green : .secondary)
             if provider.id.isAPI {

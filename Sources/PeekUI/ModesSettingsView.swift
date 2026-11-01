@@ -30,6 +30,7 @@ struct ModesSettingsView: View {
             }
             .settingsPage()
         }
+        .accessibilityHidden(editing != nil)
         .overlay { drawer }
         .animation(.easeOut(duration: 0.18), value: editing)
     }
@@ -166,7 +167,9 @@ private struct ModeEditor: View {
                         .keyboardShortcut(.defaultAction)
                         .disabled(!isValid)
                 } else {
-                    Button("Done", action: close).keyboardShortcut(.defaultAction)
+                    Button("Done", action: close)
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.cancelAction)
                 }
             }
             VStack(alignment: .leading, spacing: 6) {
@@ -198,6 +201,7 @@ private struct ModeEditor: View {
             if mode != nil {
                 Button("Delete Mode", role: .destructive, action: delete)
                     .buttonStyle(.borderless)
+                    .foregroundStyle(canDelete ? Color.red : Color.secondary)
                     .disabled(!canDelete)
                     .help(canDelete ? "" : "Keep at least one mode with a name and a prompt.")
             }
