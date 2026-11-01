@@ -108,9 +108,13 @@ public final class AppController: NSObject, NSMenuDelegate {
 
     @objc private func showSettings() {
         if settingsWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 584, height: 594),
-                                  styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 860, height: 620),
+                                  styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+                                  backing: .buffered, defer: false)
             window.title = "Peek Settings"
+            // The sidebar runs under the traffic lights.
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
             window.contentView = NSHostingView(rootView: SettingsView(model: settingsModel))
             window.isReleasedWhenClosed = false
             window.center()

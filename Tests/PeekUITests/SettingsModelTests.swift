@@ -142,3 +142,9 @@ import Testing
     #expect(model.deleteMode(id: added.id))
     #expect(seen == [model.settings.modes.map(\.id) + [added.id], model.settings.modes.map(\.id)])
 }
+
+@Test @MainActor func shortcutDescriptionsSplitIntoKeycaps() {
+    #expect(ShortcutKeys.keys(of: "⌥⇧Space") == ["⌥", "⇧", "Space"])
+    #expect(ShortcutKeys.keys(of: "⌃⌥⇧⌘E") == ["⌃", "⌥", "⇧", "⌘", "E"])
+    #expect(ShortcutKeys.keys(of: "F5") == ["F5"])
+}
