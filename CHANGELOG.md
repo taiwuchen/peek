@@ -3,6 +3,20 @@
 Notable changes to Peek. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and Peek aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5] - 2026-11-08
+
+### Changed
+
+- Settings has a sidebar with Modes, Providers, and Permissions.
+- Modes are added and edited in a sheet, with their own keyboard shortcuts.
+- Shortcuts are recorded with a new keycap recorder. Press a shortcut, Delete to clear it, or Escape to cancel.
+- Captures use the last used mode. Settings shows which one instead of a mode picker.
+- Pasted, dropped, and picked attachments stay in the draft until you send, instead of sending right away.
+
+### Fixed
+
+- Long questions wrap with the text aligned left, not right.
+
 ## [0.3.0] - 2026-11-01
 
 ### Added
@@ -84,6 +98,8 @@ First public version. The DMG is unsigned and not notarized. Screen Recording do
 - CLI subscription providers are listed before hosted API providers in Settings.
 - Debug builds are signed with an Apple Development certificate so the Screen Recording grant survives rebuilds.
 
+[0.3.5]: https://github.com/taiwuchen/peek/releases/tag/v0.3.5
+[0.3.0]: https://github.com/taiwuchen/peek/releases/tag/v0.3.0
 [0.2.0]: https://github.com/taiwuchen/peek/releases/tag/v0.2.0
 [0.1.2]: https://github.com/taiwuchen/peek/releases/tag/v0.1.2
 [0.1.1]: https://github.com/taiwuchen/peek/releases/tag/v0.1.1
