@@ -265,7 +265,7 @@ private struct ConversationTurn: View {
             }
             if isUser {
                 if let text = message.captures.isEmpty ? message.text : addedContext {
-                    Text(text).multilineTextAlignment(.trailing).textSelection(.enabled)
+                    Text(text).textSelection(.enabled)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
                         .glassPill(RoundedRectangle(cornerRadius: 18, style: .continuous))

@@ -39,18 +39,11 @@ struct ModesSettingsView: View {
         HStack(spacing: 20) {
             ShortcutKeys(name: .askRegion, label: "the capture shortcut", conflict: owner)
                 .frame(width: settingsLeadingColumn, alignment: .leading)
-            HStack(spacing: 6) {
-                Text("Capture with")
-                Picker("Active mode", selection: $model.settings.selectedModeID) {
-                    if model.settings.selectedMode == nil {
-                        Text("Choose a mode").tag(model.settings.selectedModeID)
-                    }
-                    ForEach(model.settings.modes) { mode in
-                        Text(mode.name).tag(Optional(mode.id))
-                    }
-                }
-                .labelsHidden()
-                .fixedSize()
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Captures with the last used mode")
+                Text(model.settings.selectedMode?.name ?? "No mode used yet")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
         }
